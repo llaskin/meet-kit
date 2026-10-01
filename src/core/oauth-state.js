@@ -23,7 +23,8 @@ async function hmac(message, key) {
 }
 
 /** Constant-time-ish comparison. Avoids leaking where two signatures diverge. */
-function safeEqual(a, b) {
+export function safeEqual(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string') return false
   if (a.length !== b.length) return false
   let diff = 0
   for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i)
@@ -71,4 +72,9 @@ export async function getOrCreateStateKey(db, store) {
   const key = b64urlEncode(String.fromCharCode(...bytes))
   await store.setConfig(db, 'state_signing_key', key)
   return key
+}
+
+/** 256 random bits, base64url. Binds an OAuth state to the browser that started it. */
+export function randomNonce() {
+  return b64urlEncode(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))
 }

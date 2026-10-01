@@ -113,3 +113,34 @@ test('a chunked freeBusy fails closed if any window fails', async () => {
   assert.equal(r.errors.length, 1)
   assert.equal(r.busy.length, 0, 'no partial busy data on failure')
 })
+
+// Finding 1 (defence in depth): a stored accounts/api host that is not a real
+// Zoho region must never receive the client secret or a bearer token.
+test('refreshAccessToken refuses a non-Zoho accounts host without any network call', async () => {
+  const calls = stubFetch(() => jsonResponse({ access_token: 'zat', expires_in: 3600 }))
+  await assert.rejects(
+    refreshAccessToken({ clientId: 'c', clientSecret: 's', refreshToken: 'rt', accountsHost: 'https://evil.example' }),
+    /Unknown Zoho region/,
+  )
+  assert.equal(calls.length, 0)
+})
+
+test('refreshAccessToken refuses look-alike hosts (suffix, userinfo, path, http)', async () => {
+  const calls = stubFetch(() => jsonResponse({ access_token: 'zat', expires_in: 3600 }))
+  for (const h of ['https://accounts.zoho.com.evil.example', 'https://accounts.zoho.com@evil.example',
+    'https://accounts.zoho.com/x', 'http://accounts.zoho.com', 'https://ACCOUNTS.zoho.com']) {
+    await assert.rejects(refreshAccessToken({ clientId: 'c', clientSecret: 's', refreshToken: 'rt', accountsHost: h }), /Unknown Zoho region/, h)
+  }
+  assert.equal(calls.length, 0)
+})
+
+test('freeBusy and listCalendars refuse a non-Zoho api host without sending the token', async () => {
+  const calls = stubFetch(() => jsonResponse({ freebusy: [], calendars: [] }))
+  const r = await freeBusy({ accessToken: 'zat', apiHost: 'https://evil.example', accountEmail: 'o@example.com',
+    timeMin: '2026-09-14T00:00:00Z', timeMax: '2026-09-15T00:00:00Z' })
+  assert.equal(r.errors.length, 1)
+  assert.deepEqual(r.busy, [])
+  const { listCalendars } = await import('../src/core/zoho-calendar.js')
+  await assert.rejects(listCalendars({ accessToken: 'zat', apiHost: 'https://evil.example' }), /Unknown Zoho region/)
+  assert.equal(calls.length, 0)
+})

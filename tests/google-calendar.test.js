@@ -35,18 +35,19 @@ test('refreshAccessToken surfaces invalid_grant as needing reconnection', async 
   )
 })
 
-test('listCalendars returns id, name and primary flag', async () => {
+test('listCalendars returns id, name, primary flag and access role', async () => {
   stubFetch(() =>
     jsonResponse({
       items: [
-        { id: 'owner@example.com', summary: 'owner@example.com', primary: true },
-        { id: 'fam@group.calendar.google.com', summary: 'Family', summaryOverride: 'Family Stuff' },
+        { id: 'owner@example.com', summary: 'owner@example.com', primary: true, accessRole: 'owner' },
+        { id: 'fam@group.calendar.google.com', summary: 'Family', summaryOverride: 'Family Stuff', accessRole: 'reader' },
       ],
     }),
   )
   const cals = await listCalendars('at-1')
   assert.equal(cals.length, 2)
-  assert.deepEqual(cals[0], { id: 'owner@example.com', name: 'owner@example.com', primary: true, meet: false })
+  assert.deepEqual(cals[0], { id: 'owner@example.com', name: 'owner@example.com', primary: true, accessRole: 'owner', meet: false })
+  assert.equal(cals[1].accessRole, 'reader')
   // summaryOverride is the user's own rename and wins over summary.
   assert.equal(cals[1].name, 'Family Stuff')
   assert.equal(cals[1].primary, false)

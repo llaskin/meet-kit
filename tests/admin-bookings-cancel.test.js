@@ -45,3 +45,50 @@ test('Google failure: nothing recorded', async () => {
   assert.equal(res.status, 502)
   assert.equal(db.raw.prepare('SELECT COUNT(*) n FROM public_bookings').get().n, 1)
 })
+
+// ---------------------------------------------------------------------------
+// Finding 6: id is validated before any DB call, and the "meeting was
+// cancelled" message is only ever sent when the Google delete succeeded.
+// ---------------------------------------------------------------------------
+
+const noTouchDB = () => ({
+  prepare() { throw new Error('DB touched before id validation') },
+  batch() { throw new Error('DB touched before id validation') },
+})
+const cancelReq = (body) => new Request('https://x.test', { method: 'POST', body: JSON.stringify(body) })
+
+for (const id of ['', 'a'.repeat(65), 'abc def', "x' OR 1=1--", '../etc', 42, ['a'], { a: 1 }, null]) {
+  test(`cancel rejects id ${JSON.stringify(id)} with 400 before touching the DB`, async () => {
+    const res = await onRequestPost({ request: cancelReq({ id }), env: ENV(noTouchDB()), owner: OWNER })
+    assert.equal(res.status, 400)
+  })
+}
+
+test('a 64-char hyphenated id passes validation (reaches the lookup, 404)', async () => {
+  const db = realDB()
+  const res = await onRequestPost({ request: cancelReq({ id: 'a-'.repeat(32) }), env: ENV(db), owner: OWNER })
+  assert.equal(res.status, 404)
+})
+
+test('record update fails AFTER the Google delete: 500 says the meeting was cancelled', async () => {
+  const { db, id } = await seed()
+  const calls = []
+  googleApi.fetch = async (url, opts) => { calls.push(opts?.method); return new Response(null, { status: 204 }) }
+  db.raw.exec('DROP TABLE public_bookings_cancelled')
+  const res = await onRequestPost({ request: cancelReq({ id }), env: ENV(db), owner: OWNER })
+  assert.equal(res.status, 500)
+  assert.deepEqual(calls, ['DELETE'])
+  assert.match((await res.json()).error, /meeting was cancelled/)
+})
+
+test('a failure BEFORE any Google delete: plain 500 that does not claim the meeting was cancelled', async () => {
+  const { db, id } = await seed()
+  let called = false
+  googleApi.fetch = async () => { called = true; return new Response(null, { status: 204 }) }
+  const broken = { ...db, prepare(sql) { if (sql.includes('FROM public_bookings')) throw new Error('D1 down'); return db.prepare(sql) } }
+  const res = await onRequestPost({ request: cancelReq({ id }), env: ENV(broken), owner: OWNER })
+  assert.equal(res.status, 500)
+  assert.equal(called, false)
+  const { error } = await res.json()
+  assert.equal(error, 'Could not cancel the booking')
+})

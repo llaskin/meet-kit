@@ -29,6 +29,37 @@ export async function setConfig(db, key, value) {
     .run()
 }
 
+/** Delete one config key. Returns how many rows went (0 or 1). */
+export async function deleteConfig(db, key) {
+  const r = await db.prepare('DELETE FROM calendar_config WHERE key = ?').bind(key).run()
+  return Number(r?.meta?.changes ?? 0)
+}
+
+// OAuth state nonces. One row per in-flight consent flow, issued by start and
+// DELETED by the first callback that presents it, so a state is single-use.
+// The value is the expiry in epoch seconds, used only to sweep abandoned flows.
+export const OAUTH_NONCE_PREFIX = 'oauth_nonce:'
+
+export async function recordOAuthNonce(db, nonce, expiresAtSec) {
+  await setConfig(db, `${OAUTH_NONCE_PREFIX}${nonce}`, String(expiresAtSec))
+}
+
+/**
+ * Atomically consume an issued nonce. True only for the ONE caller whose
+ * DELETE removed the row: a replay, or a nonce that was never issued, is false.
+ */
+export async function consumeOAuthNonce(db, nonce) {
+  return (await deleteConfig(db, `${OAUTH_NONCE_PREFIX}${nonce}`)) === 1
+}
+
+/** Drop nonces for consent flows that were started and never finished. */
+export async function purgeExpiredOAuthNonces(db, nowSec) {
+  await db
+    .prepare(`DELETE FROM calendar_config WHERE key LIKE '${OAUTH_NONCE_PREFIX}%' AND CAST(value AS INTEGER) < ?`)
+    .bind(nowSec)
+    .run()
+}
+
 /** Stored rules overlaid on DEFAULT_RULES. Absent keys keep their default. */
 export async function getRules(db) {
   const cfg = await getConfig(db)

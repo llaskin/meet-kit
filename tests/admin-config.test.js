@@ -42,13 +42,164 @@ test('meet link must be https or empty', async () => {
 test('writeCalendarId must belong to the booking account, and refreshes the Meet flag', async () => {
   const db = realDB()
   await withWrite(db)
+  // accessRole as Google's calendarList returns it: PUT now requires owner/writer.
   googleApi.fetch = async () => Response.json({ items: [
-    { id: OWNER, primary: true, conferenceProperties: { allowedConferenceSolutionTypes: ['hangoutsMeet'] } },
-    { id: 'team@group.calendar.google.com', conferenceProperties: { allowedConferenceSolutionTypes: [] } },
+    { id: OWNER, primary: true, accessRole: 'owner', conferenceProperties: { allowedConferenceSolutionTypes: ['hangoutsMeet'] } },
+    { id: 'team@group.calendar.google.com', accessRole: 'writer', conferenceProperties: { allowedConferenceSolutionTypes: [] } },
   ] })
   assert.equal((await put(db, { writeCalendarId: 'stranger@group.calendar.google.com' })).status, 400)
   assert.equal((await put(db, { writeCalendarId: 'team@group.calendar.google.com' })).status, 200)
   const cfg = await store.getConfig(db)
   assert.equal(cfg.write_calendar_id, 'team@group.calendar.google.com')
   assert.equal(cfg.write_calendar_meet, '0')
+})
+
+// ---------------------------------------------------------------------------
+// Finding 4: every value is validated BEFORE anything is written.
+// ---------------------------------------------------------------------------
+
+const snapshot = (db) => JSON.stringify(db.raw.prepare('SELECT key, value FROM calendar_config ORDER BY key').all())
+const LIVE = (items) => async () => Response.json({ items })
+
+test('writeCalendarId refuses a calendar the booking account can only READ', async () => {
+  const db = realDB()
+  await withWrite(db)
+  googleApi.fetch = LIVE([
+    { id: OWNER, primary: true, accessRole: 'owner' },
+    { id: 'team@group.calendar.google.com', accessRole: 'reader' },
+  ])
+  const before = snapshot(db)
+  const res = await put(db, { writeCalendarId: 'team@group.calendar.google.com' })
+  assert.equal(res.status, 400)
+  assert.match((await res.json()).error, /write/i)
+  assert.equal(snapshot(db), before)
+})
+
+test('writeCalendarId refuses a calendar missing from Google\'s live list', async () => {
+  const db = realDB()
+  await withWrite(db)
+  googleApi.fetch = LIVE([{ id: OWNER, primary: true, accessRole: 'owner' }])
+  const before = snapshot(db)
+  assert.equal((await put(db, { writeCalendarId: 'team@group.calendar.google.com' })).status, 400)
+  assert.equal(snapshot(db), before)
+})
+
+test('writeCalendarId accepts owner and writer access', async () => {
+  for (const accessRole of ['owner', 'writer']) {
+    const db = realDB()
+    await withWrite(db)
+    googleApi.fetch = LIVE([{ id: OWNER, primary: true, accessRole: 'owner' }, { id: 'team@group.calendar.google.com', accessRole }])
+    assert.equal((await put(db, { writeCalendarId: 'team@group.calendar.google.com' })).status, 200, accessRole)
+    assert.equal((await store.getConfig(db)).write_calendar_id, 'team@group.calendar.google.com')
+  }
+})
+
+test('Google unreachable while checking the calendar: 502 and nothing written', async () => {
+  const db = realDB()
+  await withWrite(db)
+  googleApi.fetch = async () => { throw new TypeError('fetch failed') }
+  const before = snapshot(db)
+  const res = await put(db, { meetLink: 'https://zoom.example/j/2', writeCalendarId: 'team@group.calendar.google.com' })
+  assert.equal(res.status, 502)
+  assert.equal((await res.json()).error, 'Could not reach Google to check that calendar')
+  assert.equal(snapshot(db), before)
+})
+
+const INVALID = [
+  ['timezone', { rules: { timezone: 'Mars/Olympus_Mons' } }],
+  ['startTime', { rules: { startTime: '9am' } }],
+  ['startTime', { rules: { startTime: '24:00' } }],
+  ['endTime', { rules: { endTime: '17:60' } }],
+  ['endTime', { rules: { startTime: '17:00', endTime: '09:00' } }],
+  ['endTime', { rules: { startTime: '09:00', endTime: '09:00' } }],
+  ['weekdays', { rules: { weekdays: [] } }],
+  ['weekdays', { rules: { weekdays: [1, 1] } }],
+  ['weekdays', { rules: { weekdays: [7] } }],
+  ['weekdays', { rules: { weekdays: [1.5] } }],
+  ['weekdays', { rules: { weekdays: '1,2' } }],
+  ['intervalMinutes', { rules: { intervalMinutes: -5 } }],
+  ['intervalMinutes', { rules: { intervalMinutes: 4 } }],
+  ['intervalMinutes', { rules: { intervalMinutes: 241 } }],
+  ['intervalMinutes', { rules: { intervalMinutes: 7.5 } }],
+  ['intervalMinutes', { rules: { intervalMinutes: 'abc' } }],
+  ['minNoticeMinutes', { rules: { minNoticeMinutes: -1 } }],
+  ['minNoticeMinutes', { rules: { minNoticeMinutes: 10081 } }],
+  ['horizonDays', { rules: { horizonDays: 0 } }],
+  ['horizonDays', { rules: { horizonDays: 366 } }],
+  ['internalAttendeeEmail', { internalAttendeeEmail: 'not-an-email' }],
+  ['zohoAccountEmail', { zohoAccountEmail: 'a@b' }],
+  ['meetLink', { meetLink: 'http://zoom.example/j/1' }],
+]
+
+for (const [field, bad] of INVALID) {
+  test(`PUT refuses invalid ${field} (${JSON.stringify(bad)}) and writes NOTHING`, async () => {
+    const db = realDB()
+    const before = snapshot(db)
+    // A valid field alongside the invalid one: it must not be written either.
+    const body = { ...bad, ...(field === 'meetLink' ? { internalAttendeeEmail: 'ok@example.com' } : { meetLink: 'https://zoom.example/j/9' }) }
+    const res = await put(db, body)
+    assert.equal(res.status, 400)
+    assert.match((await res.json()).error, new RegExp(field))
+    assert.equal(snapshot(db), before)
+  })
+}
+
+test('a negative interval is refused and the stored interval is unchanged', async () => {
+  const db = realDB()
+  assert.equal((await put(db, { rules: { intervalMinutes: -15 } })).status, 400)
+  assert.equal((await store.getRules(db)).intervalMinutes, store.DEFAULT_RULES.intervalMinutes)
+})
+
+// Restored from the source project's admin-config tests.
+test('PUT persists availability rules', async () => {
+  const db = realDB()
+  const res = await put(db, { rules: {
+    timezone: 'Europe/London', weekdays: [1, 3, 5], startTime: '08:30', endTime: '16:00',
+    intervalMinutes: 15, minNoticeMinutes: 60, horizonDays: 14,
+  } })
+  assert.equal(res.status, 200)
+  const rules = await store.getRules(db)
+  assert.equal(rules.timezone, 'Europe/London')
+  assert.deepEqual(rules.weekdays, [1, 3, 5])
+  assert.equal(rules.startTime, '08:30')
+  assert.equal(rules.endTime, '16:00')
+  assert.equal(rules.intervalMinutes, 15)
+  assert.equal(rules.minNoticeMinutes, 60)
+  assert.equal(rules.horizonDays, 14)
+})
+
+test('integer-shaped strings from form inputs are accepted', async () => {
+  const db = realDB()
+  assert.equal((await put(db, { rules: { intervalMinutes: '20', minNoticeMinutes: '0', horizonDays: '30' } })).status, 200)
+  const rules = await store.getRules(db)
+  assert.equal(rules.intervalMinutes, 20)
+  assert.equal(rules.minNoticeMinutes, 0)
+  assert.equal(rules.horizonDays, 30)
+})
+
+test('Zoho account email round-trips through PUT and GET', async () => {
+  const db = realDB()
+  assert.equal((await put(db, { zohoAccountEmail: '  owner-work@example.com ' })).status, 200)
+  assert.equal((await (await onRequestGet({ env: ENV(db) })).json()).zohoAccountEmail, 'owner-work@example.com')
+  assert.equal((await put(db, { zohoAccountEmail: '' })).status, 200)
+  assert.equal((await (await onRequestGet({ env: ENV(db) })).json()).zohoAccountEmail, '')
+})
+
+test('internal attendee email round-trips through PUT and GET', async () => {
+  const db = realDB()
+  assert.equal((await put(db, { internalAttendeeEmail: 'team@example.com' })).status, 200)
+  assert.equal((await (await onRequestGet({ env: ENV(db) })).json()).internalAttendeeEmail, 'team@example.com')
+})
+
+test('PUT rejects malformed JSON', async () => {
+  const db = realDB()
+  const res = await onRequestPut({ request: new Request('https://x.test', { method: 'PUT', body: '{not json' }), env: ENV(db) })
+  assert.equal(res.status, 400)
+})
+
+test('GET reports writeAccount null until a write connection exists', async () => {
+  const db = realDB()
+  assert.equal((await (await onRequestGet({ env: ENV(db) })).json()).writeAccount, null)
+  await withWrite(db)
+  assert.equal((await (await onRequestGet({ env: ENV(db) })).json()).writeAccount, OWNER)
 })

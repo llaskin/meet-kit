@@ -31,6 +31,18 @@ export async function cancelBooking(db, cfg, { id, cancelledBy, nowIso }) {
     }
   }
 
-  await cancelPublicBooking(db, { row, cancelledAt: nowIso, cancelledBy })
+  try {
+    await cancelPublicBooking(db, { row, cancelledAt: nowIso, cancelledBy })
+  } catch {
+    // Only here has a Google delete (if any) already succeeded, so only here
+    // may the caller be told the meeting itself is gone.
+    return {
+      ok: false,
+      status: 500,
+      error: row.event_id
+        ? 'The meeting was cancelled and the guests were notified, but the record could not be updated. Retrying is safe.'
+        : 'Could not cancel the booking',
+    }
+  }
   return { ok: true, alreadyGone }
 }

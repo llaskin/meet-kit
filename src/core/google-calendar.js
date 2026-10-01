@@ -131,6 +131,8 @@ export async function listCalendars(accessToken) {
       id: c.id,
       name: c.summaryOverride || c.summary || c.id,
       primary: Boolean(c.primary),
+      // owner | writer | reader | freeBusyReader. Only owner/writer can take an event.
+      accessRole: c.accessRole || '',
       // Whether Google will mint a unique Meet room on this calendar.
       meet: (c.conferenceProperties?.allowedConferenceSolutionTypes || []).includes('hangoutsMeet'),
     }))

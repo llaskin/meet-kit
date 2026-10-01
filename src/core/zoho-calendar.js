@@ -8,6 +8,18 @@ export const zohoCalApi = {
 // calendar.READ is only used to discover the account email at connect time.
 export const ZOHO_SCOPES = 'ZohoCalendar.calendar.READ,ZohoCalendar.freebusy.READ'
 
+// Zoho's real data-centre accounts servers. Exact string match, no parsing:
+// the callback's `accounts-server` param is attacker-controlled, and the client
+// secret is POSTed to whatever host it names. Anything else is refused.
+export const ZOHO_ACCOUNTS_HOSTS = Object.freeze(
+  ['com', 'eu', 'in', 'com.au', 'jp', 'ca', 'sa', 'uk', 'com.cn'].map((tld) => `https://accounts.zoho.${tld}`),
+)
+const ZOHO_CALENDAR_HOSTS = ZOHO_ACCOUNTS_HOSTS.map((h) => h.replace('//accounts.', '//calendar.'))
+export const UNKNOWN_ZOHO_REGION = 'Unknown Zoho region'
+
+export const isZohoAccountsHost = (h) => ZOHO_ACCOUNTS_HOSTS.includes(h)
+export const isZohoCalendarHost = (h) => ZOHO_CALENDAR_HOSTS.includes(h)
+
 /**
  * Derive the Calendar host from the accounts server.
  *
@@ -34,6 +46,8 @@ export function buildAuthUrl({ clientId, redirectUri, state, accountsHost = 'htt
 }
 
 async function tokenRequest(accountsHost, form) {
+  // Defence in depth: refuses a poisoned stored accounts_host on refresh too.
+  if (!isZohoAccountsHost(accountsHost)) throw new Error(UNKNOWN_ZOHO_REGION)
   const res = await zohoCalApi.fetch(`${accountsHost}/oauth/v2/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -88,6 +102,7 @@ function parseZohoStamp(stamp) {
 
 /** List calendars. Used at connect time to discover the account email. */
 export async function listCalendars({ accessToken, apiHost }) {
+  if (!isZohoCalendarHost(apiHost)) throw new Error(UNKNOWN_ZOHO_REGION)
   const res = await zohoCalApi.fetch(`${apiHost}/api/v1/calendars`, {
     headers: { Authorization: `Zoho-oauthtoken ${accessToken}` },
   })
@@ -132,6 +147,11 @@ export async function freeBusy({ accessToken, apiHost, accountEmail, timeMin, ti
     return { busy, errors: [] }
   }
 
+  // Never send the bearer token to a host that is not a Zoho region. Fail
+  // closed with an error (not an empty busy list, which would read as free).
+  if (!isZohoCalendarHost(apiHost)) {
+    return { busy: [], errors: [{ calendarId: 'zoho', reason: UNKNOWN_ZOHO_REGION }] }
+  }
   const params = new URLSearchParams({
     uemail: accountEmail,
     sdate: formatZohoStamp(timeMin),
