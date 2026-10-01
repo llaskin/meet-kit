@@ -5,6 +5,7 @@ import { generateKeyPair, exportJWK, SignJWT, createLocalJWKSet } from 'jose'
 import { app, ADMIN_PREFIXES, handleWorkerError, gateOptions } from '../src/worker.js'
 import { realDB } from './helpers/d1.js'
 import { savePublicBooking } from '../src/core/public-bookings.js'
+import { CSP } from '../src/security-headers.js'
 
 const ctx = { waitUntil() {}, passThroughOnException() {} }
 const ENV = (db) => ({
@@ -261,6 +262,62 @@ test('path-normalisation bypass variants are all 403 from the gate itself', asyn
     const res = await app.request(p, {}, ENV(db), ctx)
     assert.equal(res.status, 403, `${p} -> ${res.status} (must be 403)`)
   }
+})
+
+// --- Security headers on Worker-produced responses (I-1) -------------------
+//
+// Cloudflare does not apply public/_headers to responses this Worker
+// produces (see src/security-headers.js), and run_worker_first routes
+// '/admin', '/admin/*', and '/api/*' through this Worker -- so admin HTML,
+// /api/admin/*, and /api/public/* must carry these headers themselves.
+
+test('GET /admin/ (admin HTML via ASSETS.fetch) carries the full admin header set', async () => {
+  const db = realDB()
+  gateOptions.getKey = localJWKS
+  try {
+    const token = await ownerToken()
+    const res = await app.request('/admin/', { headers: { 'Cf-Access-Jwt-Assertion': token } }, ENV(db), ctx)
+    assert.equal(res.status, 200)
+    assert.equal(res.headers.get('Content-Security-Policy'), CSP)
+    assert.equal(res.headers.get('X-Frame-Options'), 'DENY')
+    assert.equal(res.headers.get('X-Content-Type-Options'), 'nosniff')
+    assert.equal(res.headers.get('Referrer-Policy'), 'strict-origin-when-cross-origin')
+    assert.equal(res.headers.get('Cache-Control'), 'no-store')
+    assert.equal(res.headers.get('X-Robots-Tag'), 'noindex, nofollow')
+  } finally {
+    gateOptions.getKey = undefined
+  }
+})
+
+test('GET /api/admin/config carries the full admin header set', async () => {
+  const db = realDB()
+  gateOptions.getKey = localJWKS
+  try {
+    const token = await ownerToken()
+    const res = await app.request('/api/admin/config', { headers: { 'Cf-Access-Jwt-Assertion': token } }, ENV(db), ctx)
+    assert.equal(res.status, 200)
+    assert.equal(res.headers.get('Content-Security-Policy'), CSP)
+    assert.equal(res.headers.get('X-Frame-Options'), 'DENY')
+    assert.equal(res.headers.get('X-Content-Type-Options'), 'nosniff')
+    assert.equal(res.headers.get('Referrer-Policy'), 'strict-origin-when-cross-origin')
+    assert.equal(res.headers.get('Cache-Control'), 'no-store')
+    assert.equal(res.headers.get('X-Robots-Tag'), 'noindex, nofollow')
+  } finally {
+    gateOptions.getKey = undefined
+  }
+})
+
+test('GET /api/public/site carries CSP and X-Frame-Options (and the rest of the public-API set)', async () => {
+  const db = realDB()
+  const res = await app.request('/api/public/site', {}, ENV(db), ctx)
+  assert.equal(res.status, 200)
+  assert.equal(res.headers.get('Content-Security-Policy'), CSP)
+  assert.equal(res.headers.get('X-Frame-Options'), 'DENY')
+  assert.equal(res.headers.get('X-Content-Type-Options'), 'nosniff')
+  assert.equal(res.headers.get('Referrer-Policy'), 'strict-origin-when-cross-origin')
+  // Public API responses do not get the admin no-store/noindex headers.
+  assert.equal(res.headers.get('Cache-Control'), 'public, max-age=300')
+  assert.equal(res.headers.get('X-Robots-Tag'), null)
 })
 
 // --- Generic-error wrapping (item 3) ---------------------------------------

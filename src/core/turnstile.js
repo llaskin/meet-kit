@@ -1,8 +1,8 @@
 // Server-side Turnstile validation.
 // https://developers.cloudflare.com/turnstile/get-started/server-side-validation/
 //
-// Mirrors functions/api/blueprint-intake.ts on the main site. The client widget
-// alone is worthless -- a token is only meaningful once Cloudflare confirms it.
+// The client widget alone is worthless -- a token is only meaningful once
+// Cloudflare confirms it server-side, which is what this module does.
 //
 // Injectable fetch, matching googleApi/zohoCalApi: ESM namespace bindings are
 // read-only, so tests cannot reassign a plain imported function.

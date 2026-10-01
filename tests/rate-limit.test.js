@@ -14,10 +14,9 @@ function throwingDB() {
 }
 
 test('the window index exists, or a sweep table-scans', () => {
-  // Repointed at meet-kit's combined schema.sql: the source asserted this
-  // against the standalone migrations/005_rate_limit.sql, which doesn't
-  // exist here (everything is folded into one schema.sql). The index name
-  // itself is unchanged from the source migration.
+  // Asserted against schema.sql directly: meet-kit ships one combined schema
+  // file rather than a migrations/ directory, so this is the only place the
+  // index can be defined.
   assert.match(SCHEMA, /CREATE INDEX IF NOT EXISTS idx_rate_counters_window/i)
 })
 

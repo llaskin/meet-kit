@@ -49,8 +49,8 @@ const CAP_HOURS = 24
  * Unauthenticated booking, posted from the public /meet page.
  *
  * The most security-sensitive file in the project: anyone on the internet can
- * reach this with no session and no Clerk claim. The ORDER of the checks below
- * is the design, not an accident:
+ * reach this with no session and no authentication of any kind. The ORDER of
+ * the checks below is the design, not an accident:
  *
  *   1. honeypot   -- costs a bot nothing of ours: no Turnstile round-trip, no
  *                    DB read.
@@ -60,12 +60,11 @@ const CAP_HOURS = 24
  *   4. rate caps  -- per-email and per-IP, keyed off public_bookings, the
  *                    only storage this endpoint is allowed to touch besides
  *                    the calendar itself.
- *   5. freeness   -- the same fail-closed conflict check the authenticated
- *                    endpoint uses, from lib/booking-core.js.
+ *   5. freeness   -- gatherBusy (busy.js) + computeSlots (slots.js), the
+ *                    same fail-closed conflict logic /api/public/slots uses.
  *   6. create     -- the calendar event.
- *   7. record     -- ONE row in public_bookings. Never call_state, never
- *                    bookings -- see migrations/004_public_bookings.sql for
- *                    why those two tables must stay untouched by this path.
+ *   7. record     -- ONE row in public_bookings, and nothing else -- this
+ *                    path must never write to any other table in schema.sql.
  */
 export async function onRequestPost({ request, env, site }) {
   let b
@@ -126,10 +125,10 @@ export async function onRequestPost({ request, env, site }) {
   //
   // Validating only the SPAN was not enough. isAllowedSpan proves the meeting
   // is 30 or 60 minutes; it says nothing about WHERE. An anonymous caller could
-  // post 03:00 on a Sunday in 2031, or a date in 2019, and stillFree would
-  // happily query the operator's personal, work and Zoho calendars for that
-  // window -- a free/busy oracle over arbitrary time, and a way to write events
-  // outside business hours entirely.
+  // post 03:00 on a Sunday in 2031, or a date in 2019, and a conflict check
+  // alone would happily query the operator's personal, work and Zoho
+  // calendars for that window -- a free/busy oracle over arbitrary time, and
+  // a way to write events outside business hours entirely.
   //
   // So recompute the public grid from TODAY and require exact membership. That
   // subsumes freeness, business hours, weekday, minimum notice, the horizon and

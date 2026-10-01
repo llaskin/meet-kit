@@ -14,12 +14,27 @@ const PATTERNS = [
   ['aifind', 'mybusiness'], ['AI', 'FMB'], ['las', 'kin'], ['dev', 'rev'],
   ['7301c7b4-bbb8', '-4f32-a6ce-ca5b3e3d429b'], ['org_3Dthhdve6', 'MC7xfTv0b0NnUCgArr'],
   ['0x4AAAAAAE0', 'VFxAQIP8jtMZM'], ['cold-call', ''], ['CALL_STATE', '_DB'],
+  // Broader source-project leftovers: the source project's own auth
+  // provider, call-tracking table, Pages Functions path convention, intake
+  // product name, the space-separated variant of the term already covered
+  // above by the hyphenated 'cold-call' pattern, and its `lib/` module-path
+  // convention (meet-kit's own code lives under src/core, src/handlers --
+  // 'lib/' never legitimately appears in this tree; confirmed empirically
+  // with a full-tree grep before adding this pattern).
+  ['cl', 'erk'], ['call', '_state'], ['functions', '/api'], ['blue', 'print'],
+  ['cold', ' call'], ['lib', '/'],
 ].map(([a, b]) => new RegExp(`${a}${b}`, 'i'))
 
 function* files(dir) {
   for (const name of readdirSync(dir)) {
+    // Check SKIP_DIRS by NAME before statSync: a git worktree's '.git' is a
+    // FILE (containing a path to the real gitdir elsewhere), not a
+    // directory, so gating the skip on isDirectory() would miss it and this
+    // generator would read and yield that file's contents.
+    if (SKIP_DIRS.has(name)) continue
     const p = join(dir, name)
-    if (statSync(p).isDirectory()) { if (!SKIP_DIRS.has(name)) yield* files(p) } else yield p
+    if (statSync(p).isDirectory()) yield* files(p)
+    else yield p
   }
 }
 

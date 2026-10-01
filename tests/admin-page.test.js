@@ -341,6 +341,103 @@ test('the Zoho connect link is live once configured with a saved account email',
   assert.equal(doc.getElementById('connect-zoho-disabled').style.display, 'none')
 })
 
+// ---------------------------------------------------------------------------
+// M-3: the weekdays <input> is a comma-separated list the operator can leave
+// with a trailing comma, a stray double comma, or empty entirely. split(',')
+// on any of those produces an empty-string token, and Number('') is 0 (a
+// finite number) -- so without dropping empty tokens FIRST, '1,2,' or '' would
+// silently add Sunday (weekday 0) to the saved rules.
+// ---------------------------------------------------------------------------
+
+async function bootForSave({ configOverrides = {}, connections = [] } = {}) {
+  let cfg = { ...CONFIG, ...configOverrides }
+  const puts = []
+  const dom = new JSDOM(PAGE, { url: 'https://x.test/admin/', pretendToBeVisual: true })
+  const { window } = dom
+  window.fetch = async (input, init = {}) => {
+    const u = String(input)
+    const method = init.method || 'GET'
+    if (method === 'PUT' && u.includes('/api/admin/config')) {
+      const body = JSON.parse(init.body)
+      puts.push(body)
+      cfg = { ...cfg, ...body }
+      return new Response(JSON.stringify({ ok: true }))
+    }
+    if (u.includes('/api/admin/config')) return new Response(JSON.stringify(cfg))
+    if (u.includes('/api/admin/calendars')) return new Response(JSON.stringify({ connections }))
+    return new Response('{}')
+  }
+  globalThis.window = window
+  globalThis.document = window.document
+  globalThis.location = window.location
+  globalThis.fetch = window.fetch
+  globalThis.URLSearchParams = window.URLSearchParams
+  await import(`../public/admin/admin.js?t=${Date.now()}${Math.random()}`)
+  await settle()
+  return { window, puts }
+}
+
+test('a trailing comma in the weekdays field does not add Sunday', async () => {
+  const { window, puts } = await bootForSave()
+  const doc = window.document
+  doc.getElementById('days').value = '1,2,'
+  doc.getElementById('save').dispatchEvent(new window.Event('click', { bubbles: true }))
+  await settle()
+  assert.equal(puts.length, 1)
+  assert.deepEqual(puts[0].rules.weekdays, [1, 2], 'the trailing empty token must be dropped, not become 0 (Sunday)')
+})
+
+test('an empty weekdays field saves an empty list, not [0] (Sunday)', async () => {
+  const { window, puts } = await bootForSave()
+  const doc = window.document
+  doc.getElementById('days').value = ''
+  doc.getElementById('save').dispatchEvent(new window.Event('click', { bubbles: true }))
+  await settle()
+  assert.equal(puts.length, 1)
+  assert.deepEqual(puts[0].rules.weekdays, [])
+})
+
+// ---------------------------------------------------------------------------
+// M-6: writeCalendarId must only be sent when the operator actually changed
+// the <select>. admin-config.js's PUT handler re-validates writeCalendarId
+// against Google (a live listCalendars call) whenever the field is present --
+// sending the unchanged, already-saved value on every Save (e.g. just
+// updating hours) would redo that round trip for nothing, and would fail the
+// whole save if Google happened to be briefly unreachable.
+// ---------------------------------------------------------------------------
+
+test('changing only hours (not the booking calendar) sends no writeCalendarId', async () => {
+  const { window, puts } = await bootForSave({
+    configOverrides: { writeAccount: 'owner@example.com', writeCalendarId: 'cal1', bookingCalendars: [{ id: 'cal1', name: 'Main' }] },
+  })
+  const doc = window.document
+  assert.equal(doc.getElementById('write-cal').value, 'cal1', 'the select must load with the saved calendar chosen')
+
+  doc.getElementById('start').value = '08:00'
+  doc.getElementById('save').dispatchEvent(new window.Event('click', { bubbles: true }))
+  await settle()
+
+  assert.equal(puts.length, 1)
+  assert.equal('writeCalendarId' in puts[0] && puts[0].writeCalendarId !== undefined, false,
+    'writeCalendarId must be absent (or undefined) when the select was never touched')
+})
+
+test('actually changing the booking calendar DOES send the new writeCalendarId', async () => {
+  const { window, puts } = await bootForSave({
+    configOverrides: {
+      writeAccount: 'owner@example.com', writeCalendarId: 'cal1',
+      bookingCalendars: [{ id: 'cal1', name: 'Main' }, { id: 'cal2', name: 'Other' }],
+    },
+  })
+  const doc = window.document
+  doc.getElementById('write-cal').value = 'cal2'
+  doc.getElementById('save').dispatchEvent(new window.Event('click', { bubbles: true }))
+  await settle()
+
+  assert.equal(puts.length, 1)
+  assert.equal(puts[0].writeCalendarId, 'cal2', 'the new selection must be sent when it differs from what was loaded')
+})
+
 test('saving a Zoho account email re-enables the Zoho link on the SAME anchor, without reload', async () => {
   // load() reruns after Save. A one-way replaceWith(span) would destroy the
   // anchor on the first disabled render and leave it unable to come back.

@@ -267,7 +267,14 @@ curl -s -o /dev/null -w "%{http_code} %{redirect_url}\n" --path-as-is "<url>//ad
 ```
 
 Expected: each returns `307` with a redirect to `<url>/admin/` (which then 302s
-to Access, as above).
+to Access, as above). **Unverified on a real deployed host**: the `307` was
+only observed locally under `wrangler dev` (Cloudflare's local asset layer
+normalising the path before the Worker's own gate ever runs), not yet against
+an actual deployed Pages/Workers asset host -- the production asset layer
+may normalise these paths differently (collapsing slashes, decoding `%61`) and
+return something other than `307`. That's fine either way: the gate in
+`src/worker.js` computes its own canonical form and does not rely on this
+redirect, so the only thing that matters here is the pass criterion below.
 
 **Check on the `workers.dev` hostname** (only if you use a custom domain;
 `<wd>` = `https://meet-kit.<subdomain>.workers.dev`):
@@ -279,11 +286,14 @@ curl -s -o /dev/null -w "%{http_code} %{redirect_url}\n" --path-as-is "<wd>/%61d
 curl -s -o /dev/null -w "%{http_code} %{redirect_url}\n" --path-as-is "<wd>//admin/"
 ```
 
-Expected: `403` for `/admin/` and `/api/admin/config`; the two bypass forms
-`307` to `<wd>/admin/`, which is itself `403`.
+Expected: `403` for `/admin/` and `/api/admin/config`. The two bypass forms are
+expected to end at a `403` (whether directly, or via a `307` first) -- same
+caveat as above: which of those two you actually see on a deployed host is
+unverified, so don't treat a `403` with no `307` first as a failure.
 
-**Any `200` from an admin path in this step is a failure.** Stop and report it;
-do not continue to step 9.
+**The pass criterion, regardless of whether you see a `307` first: any `200`
+from an admin path in this step is a failure.** Stop and report it; do not
+continue to step 9.
 
 ## 9. Connect calendars and set hours [you, in a browser]
 
@@ -309,9 +319,10 @@ plain-http host such as a local `wrangler dev`.
    offering Eastern business hours. Adjust minimum notice and booking horizon if
    wanted.
 6. Click **Save settings**. Expected: "Saved."
-7. Optional: **Add a Google account (busy only)** for each other calendar that
-   should block time, and tick the calendars that count as busy. Avoid ticking
-   holiday calendars, which block whole days.
+7. Optional: **Add a Google account (busy only)** for each other calendar whose
+   events should block time. Every discovered calendar starts TICKED (counted
+   as busy) by default -- untick any calendar that shouldn't block time, such
+   as a holiday or birthday calendar, which would otherwise block whole days.
 8. Optional Zoho: enter the **Zoho account email**, click **Save settings**, then
    **Connect Zoho**.
 

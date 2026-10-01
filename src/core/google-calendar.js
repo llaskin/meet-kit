@@ -1,9 +1,9 @@
 // Raw REST against Google Calendar API v3. The googleapis SDK does not run on
 // Workers, and none of this needs it.
 //
-// `googleApi` is an injectable indirection over fetch, following the pattern in
-// lib/zoho-client.js: ESM namespace bindings are read-only, so tests stub the
-// network by reassigning googleApi.fetch.
+// `googleApi` is an injectable indirection over fetch, the same pattern
+// zoho-calendar.js's `zohoCalApi` uses: ESM namespace bindings are read-only,
+// so tests stub the network by reassigning googleApi.fetch.
 export const googleApi = {
   fetch: (...args) => fetch(...args),
 }
@@ -144,7 +144,7 @@ export async function listCalendars(accessToken) {
  *
  * Google reports per-calendar failures inside an HTTP 200 body. The caller MUST
  * treat a non-empty `errors` array as unknown availability and fail closed —
- * see functions/api/calendar/slots.js.
+ * see busy.js's gatherBusy, which is exactly that caller.
  */
 export async function freeBusy(accessToken, calendarIds, timeMin, timeMax) {
   const busy = []

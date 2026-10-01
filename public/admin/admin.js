@@ -1,5 +1,10 @@
 const $ = (id) => document.getElementById(id)
 
+// Set by load(), read by the Save handler below -- so Save can tell whether
+// the <select> actually changed and only then include writeCalendarId in the
+// PUT body (see M-6 comment at the Save handler for why that matters).
+let loadedWriteCalendarId = ''
+
 const GOOGLE_MISSING = 'Set GOOGLE_CLIENT_ID and the GOOGLE_CLIENT_SECRET secret first (see DEPLOY-AGENT.md step 5).'
 const ZOHO_MISSING = 'Set ZOHO_CLIENT_ID and the ZOHO_CLIENT_SECRET secret first (see DEPLOY-AGENT.md step 5).'
 const ZOHO_NO_EMAIL = 'Set the Zoho account email above and save before connecting Zoho.'
@@ -123,6 +128,7 @@ async function load() {
     o.value = c.id; o.textContent = c.name; o.selected = c.id === cfg.writeCalendarId
     return o
   }))
+  loadedWriteCalendarId = cfg.writeCalendarId || ''
   $('meet-status').textContent = cfg.uniqueMeet
     ? 'Unique Meet links: available on this calendar.'
     : 'Unique Meet links: not available on this calendar. The fixed link below is used.'
@@ -171,16 +177,31 @@ async function load() {
 
 $('save').addEventListener('click', async () => {
   try {
+    const selectedWriteCalendarId = $('write-cal').value || ''
+    // Only send writeCalendarId when it actually CHANGED from what load()
+    // last fetched. admin-config.js's PUT handler re-validates writeCalendarId
+    // against Google on every save that includes it (a live listCalendars
+    // call) -- sending the unchanged, already-saved value on every single
+    // Save (e.g. just updating hours) would re-run that round trip for no
+    // reason, and fail the whole save if Google is briefly unreachable.
+    const writeCalendarId = selectedWriteCalendarId && selectedWriteCalendarId !== loadedWriteCalendarId
+      ? selectedWriteCalendarId
+      : undefined
     await api('/api/admin/config', {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        writeCalendarId: $('write-cal').value || undefined,
+        writeCalendarId,
         meetLink: $('meet-link').value,
         internalAttendeeEmail: $('internal-email').value,
         zohoAccountEmail: $('zoho-email').value,
         rules: {
           timezone: $('tz').value,
-          weekdays: $('days').value.split(',').map((s) => Number(s.trim())).filter(Number.isFinite),
+          // Drop empty tokens BEFORE Number(): split(',') on '' or a
+          // trailing/doubled comma ('1,2,') produces an empty-string token,
+          // and Number('') is 0 -- a finite number -- so it would silently
+          // add Sunday (weekday 0) to the saved set instead of being dropped.
+          weekdays: $('days').value.split(',').map((s) => s.trim()).filter((s) => s !== '')
+            .map(Number).filter(Number.isFinite),
           startTime: $('start').value,
           endTime: $('end').value,
           // Numbers, not the raw input strings: the handler accepts either,

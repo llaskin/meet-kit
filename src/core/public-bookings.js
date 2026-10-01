@@ -1,6 +1,7 @@
 // Store + rate-limit queries for the public /meet booking table
-// (migrations/004_public_bookings.sql). See that file's header for why
-// this table exists separately from call_state/bookings.
+// (schema.sql's public_bookings / public_bookings_cancelled). This is the
+// ONLY table the unauthenticated public booking path is allowed to write to;
+// no other table in schema.sql may be touched from this path.
 //
 // Emails are lower-cased on write and on every read here. Without that,
 // "A@B.co" and "a@b.co" would count as different attendees, and the

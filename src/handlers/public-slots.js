@@ -20,8 +20,9 @@ export const MISS_WINDOW_SECONDS = 60
 /**
  * Public availability.
  *
- * Deliberately NOT the authenticated handler with a flag: that one returns
- * connection ids, account emails and raw upstream error text, plus operator
+ * Deliberately minimal: this endpoint is unauthenticated, so it must never be
+ * the diagnostic surface an admin-gated endpoint (/api/admin/*) is free to
+ * be -- connection ids, account emails, raw upstream error text, operator
  * remediation advice. This returns exactly three keys and never explains a
  * failure. Any internal problem -- no connection, unreadable calendar, expired
  * token, missing config, an exception -- collapses into an empty slot list.

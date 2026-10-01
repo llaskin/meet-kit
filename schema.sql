@@ -1,6 +1,7 @@
 -- meet-kit D1 schema. Apply once:
 --   npx wrangler d1 execute meet-kit --remote --file=schema.sql
--- Later changes ship as numbered files in migrations/.
+-- Later schema changes will ship as numbered files in migrations/, with the
+-- apply command in each file's header.
 
 -- Key/value settings: rules_*, write_calendar_id, write_calendar_meet,
 -- meet_link, internal_attendee_email, zoho_account_email, state_signing_key.
@@ -86,11 +87,10 @@ CREATE TABLE IF NOT EXISTS public_bookings_cancelled (
 );
 CREATE INDEX IF NOT EXISTS idx_pbc_cap ON public_bookings_cancelled (cap_identity, created_at);
 CREATE INDEX IF NOT EXISTS idx_pbc_ip  ON public_bookings_cancelled (client_ip, created_at);
--- Source migration 006 also indexes start_utc alone: the nightly retention
--- sweep (lib/public-bookings.js: `DELETE FROM public_bookings_cancelled
--- WHERE start_utc < ?`) filters on it with no cap_identity/client_ip in the
--- predicate, so idx_pbc_cap/idx_pbc_ip don't serve that scan. Added here to
--- match (source: idx_public_cancelled_start).
+-- start_utc also needs its own index: the nightly retention sweep
+-- (src/core/public-bookings.js: `DELETE FROM public_bookings_cancelled
+-- WHERE start_utc < ?`) filters on it alone, with no cap_identity/client_ip
+-- in the predicate, so idx_pbc_cap/idx_pbc_ip don't serve that scan.
 CREATE INDEX IF NOT EXISTS idx_pbc_start ON public_bookings_cancelled (start_utc);
 
 -- Fixed-window request counters for the public slots endpoint.

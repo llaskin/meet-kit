@@ -70,9 +70,10 @@ git pull upstream main
 npm install && npm test && npx wrangler deploy
 ```
 
-Schema changes ship as numbered files in `migrations/` (`migrations/NNN_*.sql`),
-each with its apply command in the file header. Run any new ones before you
-deploy.
+There is no `migrations/` directory yet -- `schema.sql` is the whole schema,
+applied once. Later schema changes will ship as numbered files in
+`migrations/` (`migrations/NNN_*.sql`), each with its apply command in the
+file header; run any new ones before you deploy.
 
 ## Support
 

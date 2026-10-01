@@ -1,8 +1,7 @@
 // Application-level rate limiting for the unauthenticated public booking
-// endpoints (/api/public/slots, /api/public/book). See migrations/005_rate_limit.sql
-// for the full "why" -- Cloudflare's native Rate Limiting binding is
-// Workers-only and unavailable to Pages Functions, and there is no KV
-// binding on this project, so D1 doubles as the limiter's storage.
+// endpoints (/api/public/slots, /api/public/book). This project has no KV
+// binding and no Cloudflare Rate Limiting rule configured, so D1 (the one
+// binding it already has) doubles as the limiter's storage.
 //
 // FIXED WINDOW, not sliding. One row per (bucket, window_start), incremented
 // by upsert. This is approximate at window edges -- a burst spanning two

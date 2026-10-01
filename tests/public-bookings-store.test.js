@@ -10,11 +10,10 @@ const base = (over = {}) => ({
 })
 
 test('the rate-limit indexes exist, or every booking table-scans', () => {
-  // Repointed at meet-kit's combined schema.sql: the source asserted this
-  // against the standalone migrations/004_public_bookings.sql, which doesn't
-  // exist here. Task 2 renamed the email-cap index from idx_public_bookings_email
-  // to idx_public_bookings_cap when consolidating migrations (it indexes
-  // cap_identity, not the raw attendee email); idx_public_bookings_ip is unchanged.
+  // Asserted against schema.sql directly: meet-kit ships one combined schema
+  // file rather than a migrations/ directory. idx_public_bookings_cap is named
+  // for what it actually indexes -- cap_identity, not the raw attendee email --
+  // and idx_public_bookings_ip indexes client_ip.
   assert.match(SCHEMA, /CREATE INDEX IF NOT EXISTS idx_public_bookings_cap/i)
   assert.match(SCHEMA, /CREATE INDEX IF NOT EXISTS idx_public_bookings_ip/i)
 })

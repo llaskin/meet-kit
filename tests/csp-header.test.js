@@ -3,14 +3,15 @@ import test from 'node:test'
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { CSP } from '../src/security-headers.js'
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url))
 const read = (p) => readFileSync(join(ROOT, p), 'utf8')
 
-const CSP = "default-src 'self'; script-src 'self' https://challenges.cloudflare.com; " +
-  "style-src 'self' 'unsafe-inline'; frame-src https://challenges.cloudflare.com; " +
-  "connect-src 'self'; img-src 'self' data:; form-action 'self'; base-uri 'self'; " +
-  "object-src 'none'; frame-ancestors 'none'"
+// CSP comes from src/security-headers.js -- the one constant the Worker
+// itself uses for admin HTML / /api/admin/* / /api/public/* -- so this test
+// fails the moment public/_headers' literal CSP line drifts from what the
+// Worker actually sends, instead of comparing two independently-typed copies.
 
 test('_headers sets a Content-Security-Policy on /* alongside the existing headers', () => {
   const h = read('public/_headers')
@@ -18,7 +19,14 @@ test('_headers sets a Content-Security-Policy on /* alongside the existing heade
   assert.match(starBlock, /X-Content-Type-Options: nosniff/, 'existing header must survive')
   assert.match(starBlock, /Referrer-Policy: strict-origin-when-cross-origin/, 'existing header must survive')
   assert.match(starBlock, /X-Frame-Options: DENY/, 'existing header must survive')
-  assert.ok(starBlock.includes(`Content-Security-Policy: ${CSP}`), 'the exact reviewed CSP must be present under /*')
+  // Exact equality on the extracted line, not .includes(): .includes() only
+  // catches CSP shrinking relative to the constant, not growing (an extra
+  // directive appended to _headers but never added to the constant would
+  // still satisfy .includes() and the drift this test exists to catch would
+  // go unnoticed).
+  const line = starBlock.match(/^\s*Content-Security-Policy:\s*(.+)$/m)
+  assert.ok(line, 'expected a Content-Security-Policy line under /*')
+  assert.equal(line[1].trim(), CSP, 'the exact reviewed CSP must be present under /*')
 })
 
 function* htmlFiles(dir) {

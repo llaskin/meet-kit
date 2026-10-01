@@ -19,6 +19,7 @@ import * as adminBookings from './handlers/admin-bookings.js'
 import * as adminCancel from './handlers/admin-cancel.js'
 import * as adminConnections from './handlers/admin-connections.js'
 import * as oauth from './handlers/oauth.js'
+import { ADMIN_HEADERS, PUBLIC_API_HEADERS, withHeaders } from './security-headers.js'
 
 // SITE is the VALIDATED display config (siteConfig(rawSite)), never the raw
 // JSON -- a typo'd meet.config.json must never leak un-sanitised strings
@@ -148,6 +149,23 @@ app.use('*', async (c, next) => {
   return next()
 })
 
+// Security-header middleware. Cloudflare does not apply public/_headers to
+// responses this Worker produces (see src/security-headers.js's header
+// comment, with the verbatim Cloudflare-docs citation), and run_worker_first
+// above sends '/admin', '/admin/*', and '/api/*' through this Worker, so
+// admin HTML, /api/admin/*, and /api/public/* all need their security
+// headers set here. Registered before the routes below so each wraps the
+// eventual response (Hono composes same-path middleware/handlers in
+// registration order).
+app.use('/api/admin/*', async (c, next) => {
+  await next()
+  c.res = withHeaders(c.res, ADMIN_HEADERS)
+})
+app.use('/api/public/*', async (c, next) => {
+  await next()
+  c.res = withHeaders(c.res, PUBLIC_API_HEADERS)
+})
+
 app.get('/api/public/site', run(publicSite.onRequestGet))
 app.get('/api/public/slots', run(publicSlots.onRequestGet))
 app.post('/api/public/book', run(publicBook.onRequestPost))
@@ -166,8 +184,8 @@ app.get('/admin/oauth/:provider/callback', run(oauth.callback))
 // static assets. In production, wrangler.jsonc's `run_worker_first` sends
 // '/admin/*' and '/api/*' through this Worker first, so the gate covers the
 // admin HTML bundle too, not just admin JSON.
-app.get('/admin/*', (c) => c.env.ASSETS.fetch(c.req.raw))
-app.get('/admin', (c) => c.env.ASSETS.fetch(c.req.raw))
+app.get('/admin/*', async (c) => withHeaders(await c.env.ASSETS.fetch(c.req.raw), ADMIN_HEADERS))
+app.get('/admin', async (c) => withHeaders(await c.env.ASSETS.fetch(c.req.raw), ADMIN_HEADERS))
 app.all('/api/*', (c) => c.json({ error: 'Not found' }, 404))
 app.all('*', (c) => c.env.ASSETS.fetch(c.req.raw))
 

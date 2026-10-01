@@ -8,14 +8,17 @@ import { accessTokenFor } from './booking-core.js'
  * account's own calendars, every read-only busy account's calendars, and
  * Zoho all contribute conflicts equally.
  *
- * Extracted from functions/api/calendar/slots.js so the authenticated and
- * public handlers share ONE implementation of the fail-closed conflict
- * logic -- a second copy is exactly how a safety property silently rots.
+ * A single implementation of the fail-closed conflict logic, meant to be
+ * shared by every caller that needs it -- a second copy is exactly how a
+ * safety property silently rots.
  *
- * Returns { busy, errors }. Callers decide what to do with `errors`: the
- * authenticated handler surfaces connection ids, account emails and raw
- * upstream reasons to the operator; the public handler must never do that
- * and should collapse any non-empty `errors` into an empty slot list.
+ * Returns { busy, errors }. Callers decide what to do with `errors`. Both
+ * current callers (public-slots.js, public-book.js) are UNAUTHENTICATED, so
+ * they must collapse any non-empty `errors` into an empty slot list rather
+ * than explain why. An admin-gated caller (behind worker.js's owner gate,
+ * like /api/admin/*) could instead surface `errors` -- connection ids,
+ * account emails, raw upstream reasons -- directly to the operator, since
+ * that information would only ever reach someone already authenticated.
  */
 export async function gatherBusy({ db, cfg, fromDay, rules }) {
   // Query window: from the start of fromDay through the horizon, padded a day

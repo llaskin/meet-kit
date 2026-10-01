@@ -252,7 +252,7 @@ function IP_CAP() { return 5 }
 
 // --- Conflict check ------------------------------------------------------
 
-test('stillFree conflict -> 409 and nothing written', async () => {
+test('a calendar conflict -> 409 and nothing written', async () => {
   googleStub({ busy: [{ start: at(10, 15), end: at(11) }] })
   turnstileStub()
   const db = await seed(realDB())
@@ -270,8 +270,8 @@ test('a successful booking writes exactly one public_bookings row and nothing el
   const res = await onRequestPost({ request: req(body()), env: envWith(db), site: SITE })
   assert.equal(res.status, 200)
   assert.equal(db.raw.prepare('SELECT COUNT(*) AS n FROM public_bookings').get().n, 1)
-  // call_state/bookings assertions dropped: meet-kit's schema.sql has no such
-  // tables (no call-tracking pipeline), so there is nothing to prove isolation from.
+  // No assertions against any other table here: schema.sql defines no other
+  // booking-shaped table this path could have written to instead.
 })
 
 test('the success response carries EXACTLY four keys and nothing else', async () => {
@@ -343,8 +343,9 @@ test('caller text is length-capped before it reaches the invite or the database'
 
 test('a window OFF the offered grid is refused', async () => {
   // Validating only the SPAN left the position unchecked: 03:00 on a Sunday in
-  // 2031, or a date in 2019, reached stillFree and queried the operator's
-  // personal, work and Zoho calendars -- a free/busy oracle over arbitrary time.
+  // 2031, or a date in 2019, would still reach the conflict check and query
+  // the operator's personal, work and Zoho calendars -- a free/busy oracle
+  // over arbitrary time.
   turnstileStub()
   googleStub()
   const db = await seed(realDB())
