@@ -126,7 +126,7 @@ test('an unreadable calendar yields zero slots and names NOTHING', async () => {
   const text = await res.text()
   const body = JSON.parse(text)
   assert.deepEqual(body.slots, [])
-  const forbidden = ['work calendar', 'other@example.com', 'owner@example.com', 'google:', 'zoho:', 'Uncheck', 'reconnect', 'calendar config']
+  const forbidden = ['work calendar', 'work@example.com', 'other@example.com', 'owner@example.com', 'google:', 'zoho:', 'Uncheck', 'reconnect', 'calendar config']
   for (const term of forbidden) {
     assert.equal(text.toLowerCase().includes(term.toLowerCase()), false, `raw response leaked "${term}"`)
   }

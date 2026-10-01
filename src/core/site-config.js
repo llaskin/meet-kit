@@ -9,7 +9,8 @@ const str = (v, d, max) => (typeof v === 'string' && v.trim() ? v.trim().slice(0
 const url = (v) => (typeof v === 'string' && /^https:\/\/[^\s]+$/.test(v.trim()) ? v.trim() : '')
 const color = (v) => (typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v) ? v : DEFAULTS.accentColor)
 
-export function siteConfig(raw = {}) {
+export function siteConfig(input) {
+  const raw = input && typeof input === 'object' ? input : {}
   return {
     displayName: str(raw.displayName, DEFAULTS.displayName, 80),
     pageTitle: str(raw.pageTitle, DEFAULTS.pageTitle, 80),
