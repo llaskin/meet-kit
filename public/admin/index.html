@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>meet-kit admin</title>
+<style>
+body{margin:0;font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;color:#1a1a1a;background:#fafaf7}
+.wrap{max-width:760px;margin:0 auto;padding:32px 16px 80px}
+section{background:#fff;border:1px solid #e3e3df;border-radius:12px;padding:18px;margin:16px 0}
+h1{font-size:22px;margin:0}h2{font-size:16px;margin:0 0 10px}
+label{display:block;font-weight:600;font-size:13px;margin:12px 0 4px}
+input,select{width:100%;box-sizing:border-box;padding:8px;border:1px solid #ccc;border-radius:7px;font:inherit}
+button,.btn{display:inline-block;margin-top:12px;padding:8px 14px;border-radius:7px;border:1px solid #0b6cff;background:#0b6cff;color:#fff;font:inherit;font-weight:600;cursor:pointer;text-decoration:none}
+button.btn-secondary{border-color:#c33;background:#fff;color:#c33}
+.ok{color:#137333}.bad{color:#b3261e}.muted{color:#5f6368;font-size:13px}
+.cal{display:flex;gap:8px;align-items:center;margin:4px 0}.cal input{width:auto}
+.conn-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:8px 0 2px}
+#flash{padding:10px;border-radius:8px;display:none}
+nav a{margin-right:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav><a href="/admin/">Setup</a><a href="/admin/bookings.html">Bookings</a><a href="/meet" target="_blank">Public page ↗</a></nav>
+  <h1>meet-kit setup</h1>
+  <p id="flash"></p>
+
+  <section id="status"><h2>Status</h2><ul id="status-list"></ul></section>
+
+  <section>
+    <h2>Booking account (Google)</h2>
+    <p id="write-account" class="muted"></p>
+    <a class="btn" id="connect-write" href="/admin/oauth/google/start?role=write">Connect booking account</a>
+    <label for="write-cal">Calendar that receives bookings</label>
+    <select id="write-cal"></select>
+    <p id="meet-status" class="muted"></p>
+  </section>
+
+  <section>
+    <h2>Busy calendars</h2>
+    <p class="muted">Any checked calendar blocks time. Add more Google accounts as busy-only sources.</p>
+    <div id="busy-list"></div>
+    <a class="btn" href="/admin/oauth/google/start?role=busy">Add a Google account (busy only)</a>
+    <label for="zoho-email">Zoho account email (optional, busy only)</label>
+    <input id="zoho-email" type="email">
+    <a class="btn" href="/admin/oauth/zoho/start?role=busy">Connect Zoho</a>
+  </section>
+
+  <section>
+    <h2>Video link and invites</h2>
+    <label for="meet-link">Fixed meeting link (used when a unique Meet room is not available)</label>
+    <input id="meet-link" type="url" placeholder="https://">
+    <label for="internal-email">Also invite this address to every booking (optional)</label>
+    <input id="internal-email" type="email">
+  </section>
+
+  <section>
+    <h2>Availability rules</h2>
+    <label for="tz">Time zone</label><input id="tz" placeholder="America/New_York">
+    <label for="days">Weekdays (0=Sun … 6=Sat, comma separated)</label><input id="days">
+    <label for="start">Day starts</label><input id="start" placeholder="09:00">
+    <label for="end">Day ends</label><input id="end" placeholder="17:00">
+    <label for="notice">Minimum notice (minutes)</label><input id="notice" type="number">
+    <label for="horizon">Booking horizon (days)</label><input id="horizon" type="number">
+    <button id="save">Save settings</button>
+  </section>
+</div>
+<script type="module" src="/admin/admin.js"></script>
+</body>
+</html>

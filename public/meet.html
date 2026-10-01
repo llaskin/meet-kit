@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Book a call</title>
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
+<style>
+:root{--accent:#0b6cff}
+/* EVERY rule is scoped to this page's own containers.
+   picker.js injects its picker at DOCUMENT level and styles it with
+   #booking-modal rules that set background but NOT color. A bare
+   `button{color:#fff}` here would paint white text on the white slot buttons,
+   month arrows and Cancel -- correctly sized, completely blank. That bug
+   already shipped once. Keep these selectors scoped. */
+body{margin:0;font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+     color:#1a1a1a;background:#fafaf7;}
+.wrap{max-width:560px;margin:0 auto;padding:40px 20px 80px;}
+h1{font-size:24px;margin:0 0 6px;letter-spacing:-.01em;}
+.sub{color:#5f6368;font-size:14px;margin:0 0 24px;}
+#meet-form,#meet-done{background:#fff;border:1px solid #e3e3df;border-radius:12px;padding:22px;}
+#meet-form label{display:block;margin:14px 0 4px;font-weight:600;font-size:13px;}
+#meet-form label:first-of-type{margin-top:0;}
+#meet-form label .opt{font-weight:400;color:#5f6368;}
+#meet-form input[type=text],#meet-form input[type=email],#meet-form textarea,#meet-form select{
+  width:100%;padding:9px;border:1px solid #ccc;border-radius:7px;font:inherit;
+  box-sizing:border-box;background:#fff;color:#1a1a1a;}
+#meet-form textarea{min-height:76px;resize:vertical;}
+#meet-form button{margin-top:18px;padding:10px 18px;border:1px solid var(--accent);background:var(--accent);
+  color:#fff;border-radius:7px;font:inherit;font-weight:600;cursor:pointer;}
+#meet-form button:disabled{background:#f1f3f4;color:#9aa0a6;border-color:#dadce0;cursor:not-allowed;}
+#meet-form .err{color:#b3261e;font-size:13px;margin-top:12px;}
+/* The honeypot. Off-screen rather than display:none -- some bots skip hidden
+   fields, but fill anything they can reach in the DOM. */
+#meet-form .hp{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;}
+#meet-form .turnstile{margin-top:18px;}
+#meet-done{border-color:#b7e1c4;background:#f2fbf5;}
+#meet-done h2{font-size:17px;margin:0 0 10px;color:#137333;}
+#meet-done dt{font-weight:600;font-size:12px;color:#5f6368;margin-top:10px;}
+#meet-done dd{margin:2px 0 0;}
+#meet-done a{color:var(--accent);font-weight:600;}
+.foot{color:#9aa0a6;font-size:12px;margin-top:20px;text-align:center;}
+.foot a{color:#5f6368;}
+#meet-form .notice{color:#5f6368;font-size:12px;margin:16px 0 0;}
+#meet-form .notice a{color:var(--accent);}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1 id="meet-title">Book a call</h1>
+    <p class="sub" id="meet-subtitle">Pick a time that works for you. You'll get a calendar invite with a video link.</p>
+  </header>
+
+  <form id="meet-form" novalidate>
+    <label for="meet-duration">How long do you need?</label>
+    <select id="meet-duration">
+      <option value="30" selected>30 minutes</option>
+      <option value="60">60 minutes</option>
+    </select>
+
+    <label for="meet-name">Your name</label>
+    <input type="text" id="meet-name" autocomplete="name" placeholder="Jane Smith">
+
+    <label for="meet-email">Your email</label>
+    <input type="email" id="meet-email" autocomplete="email" placeholder="jane@company.com">
+
+    <label for="meet-company">Company Name <span class="opt">(Optional)</span></label>
+    <input type="text" id="meet-company" autocomplete="organization">
+
+    <label for="meet-notes">What would you like to cover? <span class="opt">(optional)</span></label>
+    <textarea id="meet-notes" placeholder="Anything that would help me prepare."></textarea>
+
+    <!-- Honeypot. Real people never see or fill this. -->
+    <div class="hp" aria-hidden="true">
+      <label for="meet-website">Website</label>
+      <input type="text" id="meet-website" name="website" tabindex="-1" autocomplete="off">
+    </div>
+
+    <div class="turnstile" id="meet-turnstile"></div>
+
+    <p class="notice" id="meet-notice">We use your details to send the calendar invite and to prevent abuse.</p>
+
+    <button type="submit" id="meet-find">Find a time</button>
+    <p class="err" id="meet-error" hidden></p>
+  </form>
+
+  <section id="meet-done" hidden>
+    <h2>You're booked</h2>
+    <dl>
+      <dt>When</dt><dd id="meet-done-when"></dd>
+      <dt>Invite sent to</dt><dd id="meet-done-who"></dd>
+      <dt>Video link</dt><dd><a id="meet-done-meet" target="_blank" rel="noreferrer"></a></dd>
+    </dl>
+    <p class="sub" style="margin:14px 0 0">A calendar invite is on its way. See you then.</p>
+  </section>
+
+  <p class="foot" id="meet-foot"></p>
+</div>
+<script type="module" src="/picker.js"></script>
+<script type="module" src="/meet.js"></script>
+</body>
+</html>
