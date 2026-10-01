@@ -1,0 +1,35 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "meet-kit",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "404-page",
+    // Admin pages and every API route go through the Worker first, so the
+    // Access JWT check covers admin HTML too, not just admin JSON. '/admin'
+    // (bare, no trailing slash) is listed explicitly alongside '/admin/*' --
+    // Cloudflare's run_worker_first glob matching does not treat '/admin/*'
+    // as covering the bare path on its own.
+    "run_worker_first": ["/admin", "/admin/*", "/api/*"]
+  },
+  "observability": { "enabled": true },
+  "d1_databases": [
+    // DEPLOY-AGENT.md step 3 replaces REPLACE_WITH_D1_ID.
+    { "binding": "DB", "database_name": "meet-kit", "database_id": "REPLACE_WITH_D1_ID" }
+  ],
+  "vars": {
+    // All non-secret. Secrets (GOOGLE_CLIENT_SECRET, ZOHO_CLIENT_SECRET,
+    // TURNSTILE_SECRET_KEY) are set with `wrangler secret put`, never here.
+    "OWNER_EMAIL": "",
+    "GOOGLE_CLIENT_ID": "",
+    "ZOHO_CLIENT_ID": "",
+    "TURNSTILE_SITE_KEY": "",
+    "ACCESS_TEAM_DOMAIN": "",
+    "ACCESS_AUD": ""
+  },
+  "triggers": { "crons": ["17 7 * * *"] }
+}

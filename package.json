@@ -1,0 +1,23 @@
+{
+  "name": "meet-kit",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "engines": { "node": ">=22.13" },
+  "scripts": {
+    "test": "node --test 'tests/**/*.test.js'",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:apply": "wrangler d1 execute meet-kit --remote --file=schema.sql",
+    "db:apply:local": "wrangler d1 execute meet-kit --local --file=schema.sql"
+  },
+  "dependencies": {
+    "hono": "^4.13.12",
+    "jose": "^6.2.12"
+  },
+  "devDependencies": {
+    "jsdom": "^26.0.0",
+    "wrangler": "^4.145.0"
+  }
+}
