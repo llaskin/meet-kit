@@ -7,10 +7,18 @@ import { jwtVerify, createRemoteJWKSet } from 'jose'
 
 const remoteSets = new Map()
 
+// Only ASCII A-Z is folded to lowercase here — never String.prototype.toLowerCase(),
+// whose Unicode case-folding maps lookalike characters (e.g. U+212A KELVIN SIGN) onto
+// ASCII letters, which would let a visually-identical email spoof the owner check.
+const asciiLower = (s) => s.replace(/[A-Z]/g, (c) => c.toLowerCase())
+// The token's email must be plain, unambiguous ASCII before we compare it at all —
+// printable ASCII excludes space, so this also rejects leading/trailing whitespace.
+const ASCII_PRINTABLE = /^[\x21-\x7e]+$/
+
 export function normaliseTeamDomain(raw) {
-  const s = String(raw || '').trim().replace(/\/+$/, '')
-  if (!s) return ''
-  return /^https?:\/\//.test(s) ? s : `https://${s}`
+  if (typeof raw !== 'string') return ''
+  const host = raw.trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '').toLowerCase()
+  return host ? `https://${host}` : ''
 }
 
 function remoteKeySet(team) {
@@ -19,23 +27,36 @@ function remoteKeySet(team) {
 }
 
 export async function verifyAccess(request, env, { getKey } = {}) {
-  const team = normaliseTeamDomain(env?.ACCESS_TEAM_DOMAIN)
-  const aud = String(env?.ACCESS_AUD || '').trim()
-  const owner = String(env?.OWNER_EMAIL || '').trim().toLowerCase()
+  // Env values must be actual strings — not arrays/numbers/objects that would
+  // otherwise coerce (via String()) into something that happens to compare equal.
+  if (typeof env?.ACCESS_TEAM_DOMAIN !== 'string' || typeof env?.ACCESS_AUD !== 'string' || typeof env?.OWNER_EMAIL !== 'string') {
+    return { ok: false, reason: 'not_configured' }
+  }
+  const team = normaliseTeamDomain(env.ACCESS_TEAM_DOMAIN)
+  const aud = env.ACCESS_AUD.trim()
+  const owner = asciiLower(env.OWNER_EMAIL.trim())
   if (!team || !aud || !owner) return { ok: false, reason: 'not_configured' }
 
-  const token = request.headers.get('Cf-Access-Jwt-Assertion')
-  if (!token) return { ok: false, reason: 'missing' }
-
   try {
+    const token = request.headers.get('Cf-Access-Jwt-Assertion')
+    if (!token) return { ok: false, reason: 'missing' }
+
     const { payload } = await jwtVerify(token, getKey || remoteKeySet(team), {
       issuer: team,
       audience: aud,
       algorithms: ['RS256'],
+      // 'exp' is required: without this, a token that simply omits the claim
+      // is never treated as expired. clockTolerance is left at its 0 default
+      // intentionally — an expired or not-yet-valid (nbf) token fails closed,
+      // never sliding by any leeway.
+      requiredClaims: ['exp', 'email'],
     })
-    const email = String(payload.email || '').toLowerCase()
-    if (email !== owner) return { ok: false, reason: 'wrong_email' }
-    return { ok: true, email }
+
+    const email = payload.email
+    if (typeof email !== 'string' || !ASCII_PRINTABLE.test(email)) return { ok: false, reason: 'wrong_email' }
+    const normalisedEmail = asciiLower(email)
+    if (normalisedEmail !== owner) return { ok: false, reason: 'wrong_email' }
+    return { ok: true, email: normalisedEmail }
   } catch {
     return { ok: false, reason: 'invalid' }
   }
