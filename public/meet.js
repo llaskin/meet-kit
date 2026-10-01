@@ -72,7 +72,6 @@ export function initMeet(doc) {
     errBox.hidden = true
 
     win.MEETKIT_PICKER.openModal(buildCard(doc, res.values), {
-      direct: true,
       slotsUrl: '/api/public/slots',
       bookUrl: '/api/public/book',
       // The public page offers 30 and 60 only. The server enforces the same

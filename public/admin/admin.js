@@ -1,5 +1,17 @@
 const $ = (id) => document.getElementById(id)
 
+const GOOGLE_MISSING = 'Set GOOGLE_CLIENT_ID and the GOOGLE_CLIENT_SECRET secret first (see DEPLOY-AGENT.md step 5).'
+const ZOHO_MISSING = 'Set ZOHO_CLIENT_ID and the ZOHO_CLIENT_SECRET secret first (see DEPLOY-AGENT.md step 5).'
+const ZOHO_NO_EMAIL = 'Set the Zoho account email above and save before connecting Zoho.'
+
+/** Toggle a live anchor and its disabled-looking sibling span without ever removing either from the DOM. */
+function setConnectState(anchorId, disabledId, enabled, reason) {
+  $(anchorId).style.display = enabled ? 'inline-block' : 'none'
+  const disabled = $(disabledId)
+  disabled.style.display = enabled ? 'none' : 'inline-block'
+  disabled.textContent = reason
+}
+
 function flash(msg, ok) {
   const f = $('flash')
   f.style.display = 'block'
@@ -38,14 +50,14 @@ function makeDisconnectButton(connectionId, onDone) {
   let timer = null
   const reset = () => {
     pending = false
-    if (timer) { clearTimeout(timer); timer = null }
+    if (timer) { window.clearTimeout(timer); timer = null }
     btn.textContent = 'Disconnect'
   }
   btn.addEventListener('click', async () => {
     if (!pending) {
       pending = true
       btn.textContent = 'Click again to disconnect'
-      timer = setTimeout(reset, CONFIRM_WINDOW_MS)
+      timer = window.setTimeout(reset, CONFIRM_WINDOW_MS)
       return
     }
     reset()
@@ -83,7 +95,28 @@ async function load() {
   )
 
   $('write-account').textContent = cfg.writeAccount ? `Connected: ${cfg.writeAccount}` : 'No booking account yet.'
-  $('connect-write').style.display = cfg.writeAccount ? 'none' : 'inline-block'
+
+  // Every link below hits an /admin/oauth/{provider}/start route that 400s
+  // with a raw JSON body the visitor cannot act on when a server-side
+  // precondition is unmet (GOOGLE_CLIENT_ID/SECRET, ZOHO_CLIENT_ID/SECRET, or
+  // -- for Zoho -- a saved account email). Gate on the same cfg fields the
+  // Status list already reads, and show an explanation instead of a dead
+  // link. Never destroy the anchor (no replaceWith): load() reruns after
+  // every Save and Disconnect, and the link must be able to come back live
+  // on the SAME element without a page reload.
+  //
+  // connect-write is already hidden once a booking account exists (nothing
+  // useful to show either way), so it alone has a third state.
+  $('connect-write').style.display = (!cfg.writeAccount && cfg.googleConfigured) ? 'inline-block' : 'none'
+  $('connect-write-disabled').style.display = (!cfg.writeAccount && !cfg.googleConfigured) ? 'inline-block' : 'none'
+  $('connect-write-disabled').textContent = GOOGLE_MISSING
+
+  setConnectState('connect-busy', 'connect-busy-disabled', cfg.googleConfigured, GOOGLE_MISSING)
+
+  const zohoEmailSaved = Boolean((cfg.zohoAccountEmail || '').trim())
+  setConnectState('connect-zoho', 'connect-zoho-disabled', cfg.zohoConfigured && zohoEmailSaved,
+    cfg.zohoConfigured ? ZOHO_NO_EMAIL : ZOHO_MISSING)
+
   const sel = $('write-cal')
   sel.replaceChildren(...cfg.bookingCalendars.map((c) => {
     const o = document.createElement('option')

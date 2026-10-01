@@ -93,7 +93,8 @@ test('a valid submit drives the picker against the PUBLIC endpoints', () => {
   assert.ok(got, 'openModal was not called')
   assert.equal(got.opts.slotsUrl, '/api/public/slots')
   assert.equal(got.opts.bookUrl, '/api/public/book')
-  assert.equal(got.opts.direct, true)
+  // `direct` was an inert option picker.js never read -- removed as dead code.
+  assert.equal('direct' in got.opts, false, 'meet.js must no longer pass the unused direct option')
   assert.deepEqual(got.opts.durations, [30, 60])
   assert.equal(got.card.dataset.practice, 'Northside')
   assert.equal(got.card.dataset.notes, 'Met at the expo')

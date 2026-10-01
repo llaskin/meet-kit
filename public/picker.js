@@ -7,11 +7,20 @@ const MODAL_ID = 'booking-modal'
 const dayKeyInTz = (iso, tz) =>
   new Date(iso).toLocaleDateString('en-CA', { timeZone: tz })
 
-const fmt = (iso, tz) =>
-  new Date(iso).toLocaleString('en-US', {
-    timeZone: tz, weekday: 'short', month: 'short', day: 'numeric',
-    hour: 'numeric', minute: '2-digit',
-  })
+/**
+ * Replace a box's contents with a single <p class="cls">text</p>, built with
+ * createElement/textContent. Used for any message that interpolates server
+ * data (an error string, a failure message, a fetch rejection's err.message)
+ * -- none of that text is guaranteed free of markup-shaped characters, and an
+ * innerHTML template would turn it into live DOM in the visitor's own
+ * browser session.
+ */
+function showMsg(box, cls, text) {
+  const p = document.createElement('p')
+  p.className = cls
+  p.textContent = text
+  box.replaceChildren(p)
+}
 
 function ensureModal() {
   let el = document.getElementById(MODAL_ID)
@@ -157,7 +166,7 @@ async function openModal(card, opts = {}) {
       data = await r.json()
     } catch (err) {
       if (superseded()) return
-      slotsBox.innerHTML = `<p class="bk-error">Could not load availability: ${err.message}</p>`
+      showMsg(slotsBox, 'bk-error', `Could not load availability: ${err.message}`)
       return
     }
 
@@ -165,8 +174,8 @@ async function openModal(card, opts = {}) {
     // must stop before it touches slotsBox or hostTz.
     if (superseded()) return
 
-    if (data.error) { slotsBox.innerHTML = `<p class="bk-error">${data.error}</p>`; return }
-    if (data.failedClosed) { slotsBox.innerHTML = `<p class="bk-error">${data.message}</p>`; return }
+    if (data.error) { showMsg(slotsBox, 'bk-error', data.error); return }
+    if (data.failedClosed) { showMsg(slotsBox, 'bk-error', data.message); return }
     if (!data.slots?.length) { slotsBox.innerHTML = '<p class="bk-meta">No times available in the booking window.</p>'; return }
 
     hostTz = data.timezone
@@ -244,7 +253,10 @@ async function openModal(card, opts = {}) {
       const heading = new Date(Date.UTC(y, m - 1, d))
         .toLocaleDateString('en-US', { timeZone: 'UTC', weekday: 'long', month: 'long', day: 'numeric' })
 
-      timesBox.innerHTML = `<div class="bk-day">${heading}</div>`
+      const dayDiv = document.createElement('div')
+      dayDiv.className = 'bk-day'
+      dayDiv.textContent = heading
+      timesBox.replaceChildren(dayDiv)
       for (const sl of list) {
         const b = document.createElement('button')
         b.type = 'button'

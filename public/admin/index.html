@@ -14,6 +14,7 @@ label{display:block;font-weight:600;font-size:13px;margin:12px 0 4px}
 input,select{width:100%;box-sizing:border-box;padding:8px;border:1px solid #ccc;border-radius:7px;font:inherit}
 button,.btn{display:inline-block;margin-top:12px;padding:8px 14px;border-radius:7px;border:1px solid #0b6cff;background:#0b6cff;color:#fff;font:inherit;font-weight:600;cursor:pointer;text-decoration:none}
 button.btn-secondary{border-color:#c33;background:#fff;color:#c33}
+.btn-disabled{background:#f1f3f4;color:#9aa0a6;border-color:#dadce0;cursor:not-allowed;font-weight:400;font-size:13px;max-width:360px}
 .ok{color:#137333}.bad{color:#b3261e}.muted{color:#5f6368;font-size:13px}
 .cal{display:flex;gap:8px;align-items:center;margin:4px 0}.cal input{width:auto}
 .conn-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:8px 0 2px}
@@ -33,6 +34,7 @@ nav a{margin-right:12px}
     <h2>Booking account (Google)</h2>
     <p id="write-account" class="muted"></p>
     <a class="btn" id="connect-write" href="/admin/oauth/google/start?role=write">Connect booking account</a>
+    <span class="btn btn-disabled" id="connect-write-disabled" aria-disabled="true" style="display:none"></span>
     <label for="write-cal">Calendar that receives bookings</label>
     <select id="write-cal"></select>
     <p id="meet-status" class="muted"></p>
@@ -42,10 +44,12 @@ nav a{margin-right:12px}
     <h2>Busy calendars</h2>
     <p class="muted">Any checked calendar blocks time. Add more Google accounts as busy-only sources.</p>
     <div id="busy-list"></div>
-    <a class="btn" href="/admin/oauth/google/start?role=busy">Add a Google account (busy only)</a>
+    <a class="btn" id="connect-busy" href="/admin/oauth/google/start?role=busy">Add a Google account (busy only)</a>
+    <span class="btn btn-disabled" id="connect-busy-disabled" aria-disabled="true" style="display:none"></span>
     <label for="zoho-email">Zoho account email (optional, busy only)</label>
     <input id="zoho-email" type="email">
-    <a class="btn" href="/admin/oauth/zoho/start?role=busy">Connect Zoho</a>
+    <a class="btn" id="connect-zoho" href="/admin/oauth/zoho/start?role=busy">Connect Zoho</a>
+    <span class="btn btn-disabled" id="connect-zoho-disabled" aria-disabled="true" style="display:none"></span>
   </section>
 
   <section>

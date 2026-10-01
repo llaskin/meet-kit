@@ -23,6 +23,34 @@ const CONFIG = {
 const EVIL_CALENDAR_NAME = '<img src=x onerror=alert(1)>'
 const EVIL_ERROR = '<script>x</script>'
 
+// Like boot(), but lets a test override the config and the save/PUT response
+// so the Connect-link gating can be exercised through a full load() cycle
+// (including the re-entrant one load() runs after a Save).
+async function bootWith(configOverrides, { connections = [] } = {}) {
+  let cfg = { ...CONFIG, ...configOverrides }
+  const dom = new JSDOM(PAGE, { url: 'https://x.test/admin/', pretendToBeVisual: true })
+  const { window } = dom
+  window.fetch = async (input, init = {}) => {
+    const u = String(input)
+    const method = init.method || 'GET'
+    if (method === 'PUT' && u.includes('/api/admin/config')) {
+      cfg = { ...cfg, ...JSON.parse(init.body) }
+      return new Response(JSON.stringify({ ok: true }))
+    }
+    if (u.includes('/api/admin/config')) return new Response(JSON.stringify(cfg))
+    if (u.includes('/api/admin/calendars')) return new Response(JSON.stringify({ connections }))
+    return new Response('{}')
+  }
+  globalThis.window = window
+  globalThis.document = window.document
+  globalThis.location = window.location
+  globalThis.fetch = window.fetch
+  globalThis.URLSearchParams = window.URLSearchParams
+  await import(`../public/admin/admin.js?t=${Date.now()}${Math.random()}`)
+  await settle()
+  return window
+}
+
 async function boot() {
   const url = `https://x.test/admin/?${new URLSearchParams({ error: EVIL_ERROR })}`
   const dom = new JSDOM(PAGE, { url, pretendToBeVisual: true })
@@ -119,6 +147,62 @@ test('disconnecting the booking account needs a second click, then Connect booki
   assert.equal(doc.getElementById('connect-write').style.display, 'inline-block', 'Connect booking account must reappear')
 })
 
+test('the two-click Disconnect confirm reverts to "Disconnect" after 5s with no second click', async () => {
+  // Fake timer injected onto the jsdom window (admin.js calls
+  // window.setTimeout/window.clearTimeout, not the bare Node globals), so
+  // this never actually waits 5 real seconds.
+  const dom = new JSDOM(PAGE, { url: 'https://x.test/admin/', pretendToBeVisual: true })
+  const { window } = dom
+  let scheduled = null
+  let cleared = 0
+  window.setTimeout = (fn, ms) => { scheduled = { fn, ms }; return 1 }
+  window.clearTimeout = () => { cleared++; scheduled = null }
+  let deletes = 0
+  window.fetch = async (input, init) => {
+    const u = String(input)
+    if (init?.method === 'DELETE' && u.includes('/api/admin/connections/')) { deletes++; return new Response(JSON.stringify({ ok: true })) }
+    if (u.includes('/api/admin/config')) return new Response(JSON.stringify({ ...CONFIG, writeAccount: 'owner@example.com' }))
+    if (u.includes('/api/admin/calendars')) {
+      return new Response(JSON.stringify({
+        connections: [{
+          connectionId: 'google:owner@example.com', provider: 'google', role: 'write',
+          accountEmail: 'owner@example.com', writesEvents: true, calendars: [],
+        }],
+      }))
+    }
+    return new Response('{}')
+  }
+  globalThis.window = window
+  globalThis.document = window.document
+  globalThis.location = window.location
+  globalThis.fetch = window.fetch
+  globalThis.URLSearchParams = window.URLSearchParams
+  await import(`../public/admin/admin.js?t=${Date.now()}${Math.random()}`)
+  await settle()
+
+  const doc = window.document
+  const btn = [...doc.getElementById('busy-list').querySelectorAll('button')].find((b) => b.textContent === 'Disconnect')
+  assert.ok(btn, 'expected a Disconnect button')
+
+  btn.dispatchEvent(new window.Event('click', { bubbles: true }))
+  assert.equal(btn.textContent, 'Click again to disconnect')
+  assert.ok(scheduled, 'the 5s revert must be scheduled on window.setTimeout')
+  assert.equal(scheduled.ms, 5000)
+
+  // Simulate the 5s elapsing with no second click, by firing the scheduled
+  // callback directly -- no real wait.
+  scheduled.fn()
+
+  assert.equal(btn.textContent, 'Disconnect', 'must revert after the window with no second click')
+  assert.equal(deletes, 0, 'no disconnect must have happened')
+
+  // A fresh click after the revert must re-arm the two-click flow from
+  // scratch, proving `pending` itself was reset, not just the label.
+  btn.dispatchEvent(new window.Event('click', { bubbles: true }))
+  assert.equal(btn.textContent, 'Click again to disconnect')
+  assert.equal(deletes, 0, 'the first click of a fresh round must not disconnect')
+})
+
 test('every admin write request carries Content-Type: application/json', async () => {
   // The server's CSRF gate 415s any non-GET /api/admin/* request that does
   // not carry this header and refuses a cross-site Origin -- so the PUT
@@ -187,4 +271,89 @@ test('every admin write request carries Content-Type: application/json', async (
   for (const c of calls) {
     assert.equal(c.headers['Content-Type'], 'application/json', `${c.method} ${c.url} must carry Content-Type: application/json`)
   }
+})
+
+// ---------------------------------------------------------------------------
+// Connect links must not hand the visitor a raw OAuth-start 400/409 when a
+// precondition the server checks (GOOGLE_CLIENT_ID/SECRET, ZOHO_CLIENT_ID/
+// SECRET, a saved Zoho account email) is not yet met. admin.js gates both
+// Google connect links on cfg.googleConfigured and the Zoho connect link on
+// cfg.zohoConfigured + a saved cfg.zohoAccountEmail, from the SAME
+// /api/admin/config response the rest of the page already reads.
+// ---------------------------------------------------------------------------
+
+test('both Google connect links are disabled with explanatory text when Google OAuth is not configured', async () => {
+  const window = await bootWith({ googleConfigured: false })
+  const doc = window.document
+
+  const writeLink = doc.getElementById('connect-write')
+  const busyLink = doc.getElementById('connect-busy')
+  assert.equal(writeLink.style.display, 'none', 'the write-role anchor must be hidden')
+  assert.equal(busyLink.style.display, 'none', 'the busy-role anchor must be hidden')
+
+  const writeDisabled = doc.getElementById('connect-write-disabled')
+  const busyDisabled = doc.getElementById('connect-busy-disabled')
+  assert.notEqual(writeDisabled.style.display, 'none')
+  assert.notEqual(busyDisabled.style.display, 'none')
+  assert.match(writeDisabled.textContent, /GOOGLE_CLIENT_ID/)
+  assert.match(writeDisabled.textContent, /GOOGLE_CLIENT_SECRET/)
+  assert.match(writeDisabled.textContent, /DEPLOY-AGENT\.md step 5/)
+  assert.match(busyDisabled.textContent, /GOOGLE_CLIENT_ID/)
+
+  // Disabled-looking, not a working link: no href, so it can never navigate
+  // to the OAuth start route and surface a raw 400.
+  assert.equal(writeDisabled.tagName, 'SPAN')
+  assert.equal(writeDisabled.hasAttribute('href'), false)
+})
+
+test('the Google connect links are live when Google OAuth is configured and no write account exists', async () => {
+  const window = await bootWith({ googleConfigured: true })
+  const doc = window.document
+  assert.equal(doc.getElementById('connect-write').style.display, 'inline-block')
+  assert.equal(doc.getElementById('connect-busy').style.display, 'inline-block')
+  assert.equal(doc.getElementById('connect-write-disabled').style.display, 'none')
+  assert.equal(doc.getElementById('connect-busy-disabled').style.display, 'none')
+})
+
+test('the Zoho connect link is disabled with explanatory text when Zoho OAuth is not configured', async () => {
+  const window = await bootWith({ zohoConfigured: false, zohoAccountEmail: '' })
+  const doc = window.document
+  assert.equal(doc.getElementById('connect-zoho').style.display, 'none')
+  const disabled = doc.getElementById('connect-zoho-disabled')
+  assert.notEqual(disabled.style.display, 'none')
+  assert.match(disabled.textContent, /ZOHO_CLIENT_ID/)
+  assert.match(disabled.textContent, /ZOHO_CLIENT_SECRET/)
+})
+
+test('the Zoho connect link is disabled with explanatory text when configured but no account email is saved', async () => {
+  const window = await bootWith({ zohoConfigured: true, zohoAccountEmail: '' })
+  const doc = window.document
+  assert.equal(doc.getElementById('connect-zoho').style.display, 'none')
+  const disabled = doc.getElementById('connect-zoho-disabled')
+  assert.notEqual(disabled.style.display, 'none')
+  assert.match(disabled.textContent, /account email/i)
+})
+
+test('the Zoho connect link is live once configured with a saved account email', async () => {
+  const window = await bootWith({ zohoConfigured: true, zohoAccountEmail: 'owner@example.com' })
+  const doc = window.document
+  assert.equal(doc.getElementById('connect-zoho').style.display, 'inline-block')
+  assert.equal(doc.getElementById('connect-zoho-disabled').style.display, 'none')
+})
+
+test('saving a Zoho account email re-enables the Zoho link on the SAME anchor, without reload', async () => {
+  // load() reruns after Save. A one-way replaceWith(span) would destroy the
+  // anchor on the first disabled render and leave it unable to come back.
+  const window = await bootWith({ zohoConfigured: true, zohoAccountEmail: '' })
+  const doc = window.document
+  assert.equal(doc.getElementById('connect-zoho').style.display, 'none')
+  const anchorBefore = doc.getElementById('connect-zoho')
+
+  doc.getElementById('zoho-email').value = 'owner@example.com'
+  doc.getElementById('save').dispatchEvent(new window.Event('click', { bubbles: true }))
+  await settle()
+
+  assert.equal(doc.getElementById('connect-zoho'), anchorBefore, 'the anchor must still be the same element, not replaced')
+  assert.equal(doc.getElementById('connect-zoho').style.display, 'inline-block')
+  assert.equal(doc.getElementById('connect-zoho-disabled').style.display, 'none')
 })
