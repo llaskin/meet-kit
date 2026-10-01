@@ -1,7 +1,7 @@
 # meet-kit — Self-Hosted Booking Page Template — Design
 
 **Date:** 2026-10-01
-**Status:** Draft, awaiting Leo's review
+**Status:** Approved 2026-10-01
 **Source:** `~/Development/AIfindMyBusiness/scripts/cloudflare-cold-call-sheets/` (the `/meet` public booking feature,
 spec `2026-09-14-meeting-duration-and-public-booking-design.md`)
 **Repo:** private GitHub repo `llaskin/meet-kit` (mark as a template repository once the code lands).
@@ -65,7 +65,7 @@ meet-kit/
   DEPLOY-AGENT.md      the deploy runbook (section 3)
   CLAUDE.md            points agents at DEPLOY-AGENT.md
   README.md            what it is, requirements, update instructions, no-support note
-  LICENSE              choice deferred to Leo (open question 1)
+  LICENSE              MIT
   tests/
 ```
 
@@ -275,7 +275,7 @@ runbook HTML covering this is produced per Leo's CLAUDE.md feature rule.
 
 ## Open questions for Leo
 
-1. **License:** MIT, or an "all rights reserved, shared for personal use" notice?
+1. **License:** resolved 2026-10-01: **MIT**.
 2. **Private template access:** GitHub says "Anyone with access to the template repository can
    create a new repository based on the template"
    ([GitHub docs](https://docs.github.com/en/repositories/creating-and-managing-repositories/creating-a-repository-from-a-template)).
