@@ -30,7 +30,16 @@ export async function createBookingEvent(token, { calendarId, uniqueMeet, fixedL
   for (const ms of pollDelays) {
     if (conferenceStatus !== 'pending') break
     await sleep(ms)
-    ;({ meetUrl, conferenceStatus } = await google.getEvent(token, { calendarId, eventId: created.eventId }))
+    try {
+      ;({ meetUrl, conferenceStatus } = await google.getEvent(token, { calendarId, eventId: created.eventId }))
+    } catch {
+      // A poll failure is not proof the conference never confirmed, but we have
+      // no way to find out short of retrying indefinitely. Treat it the same as
+      // an explicit 'failure' status: stop polling and fall into the existing
+      // fixed-link -> delete -> NoLinkError path below.
+      conferenceStatus = 'failure'
+      break
+    }
   }
 
   if (conferenceStatus === 'success' && meetUrl) {
@@ -46,6 +55,15 @@ export async function createBookingEvent(token, { calendarId, uniqueMeet, fixedL
     }
   }
 
-  await google.deleteEvent(token, { calendarId, eventId: created.eventId }).catch(() => {})
+  try {
+    await google.deleteEvent(token, { calendarId, eventId: created.eventId })
+  } catch (err) {
+    // The visitor-facing outcome does not change -- we still throw NoLinkError
+    // below -- but a failed cleanup delete leaves an invited, linkless event on
+    // the owner's calendar, which needs to show up in Worker logs.
+    console.error('meet-kit: could not delete event after link failure', {
+      eventId: created.eventId, calendarId, error: String(err?.message || err),
+    })
+  }
   throw new NoLinkError('could not attach a video link')
 }
