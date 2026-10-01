@@ -33,3 +33,12 @@ test('meet_url_source accepts only unique or fixed', () => {
   db.prepare(ins).run('b', '2030-01-02T15:00:00Z', '2030-01-02T15:30:00Z', 'fixed')
   assert.throws(() => db.prepare(ins).run('c', '2030-01-03T15:00:00Z', '2030-01-03T15:30:00Z', 'zoom'), /CHECK/)
 })
+
+test('schema.sql is safe to re-apply to a live database', async () => {
+  const { SCHEMA } = await import('./helpers/d1.js')
+  const ddl = SCHEMA.split('\n').filter((l) => !l.trim().startsWith('--')).join('\n')
+  assert.doesNotMatch(ddl, /\b(DROP|ALTER|DELETE|UPDATE)\b/i)
+  for (const m of ddl.matchAll(/CREATE (UNIQUE )?(TABLE|INDEX)\s+(?!IF NOT EXISTS\b)(\w+)/gi)) {
+    assert.fail(`CREATE ${m[2]} without IF NOT EXISTS: ${m[3]}`)
+  }
+})

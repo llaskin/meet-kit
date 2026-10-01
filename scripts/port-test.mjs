@@ -21,13 +21,12 @@ const DROP_LINE = /^\s*db\.exec\(readFileSync\(fileURLToPath\(new URL\('\.\.\/mi
 
 const SCRUB = [
   [/aifindmybusiness@gmail\.com/g, 'owner@example.com'],
-  [/leo@aifindmybusiness\.com/g, 'owner@example.com'],
+  [/leo@aifindmybusiness\.com/g, 'owner-work@example.com'],
   [/leo\.laskin@devrev\.ai/g, 'work@example.com'],
   [/https:\/\/aifindmybusiness\.com/g, 'https://example.com'],
   [/AI Find My Business/g, 'Example Co'],
   [/AIFMB_BOOKING/g, 'MEETKIT_PICKER'],
   [/'AIFMB'/g, "'Owner calendar'"],
-  [/env\.CALL_STATE_DB/g, 'env.DB'],
   [/CALL_STATE_DB/g, 'DB'],
 ]
 
