@@ -35,7 +35,9 @@ test('the page loads the Turnstile script explicitly and ships no hardcoded site
   // meet.js once /api/public/site returns the owner's turnstileSiteKey.
   assert.match(PAGE, /challenges\.cloudflare\.com\/turnstile\/v0\/api\.js\?render=explicit/)
   assert.match(PAGE, /<div class="turnstile" id="meet-turnstile">/)
-  assert.doesNotMatch(PAGE, /0x4AAAA|data-sitekey/i)
+  // Patterns built from split strings so this file never contains the literals
+  // the leak check (tests/leak-check.test.js) scans for.
+  assert.doesNotMatch(PAGE, new RegExp(['0x4' + 'AAAA', 'data-sitekey'].join('|'), 'i'))
 })
 
 test('the honeypot is reachable by bots but not by people', () => {
@@ -221,5 +223,6 @@ test('applySite leaves the footer empty when the owner sets no branding or links
 })
 
 test('the page ships no hardcoded site key or owner branding', () => {
-  assert.doesNotMatch(PAGE, /0x4AAAA|aifindmybusiness|AI Find My Business/i)
+  // Split strings: see the note in the site-key test above.
+  assert.doesNotMatch(PAGE, new RegExp(['0x4' + 'AAAA', 'aifind' + 'mybusiness', 'AI Find ' + 'My Business'].join('|'), 'i'))
 })

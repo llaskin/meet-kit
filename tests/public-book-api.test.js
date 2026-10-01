@@ -271,7 +271,7 @@ test('a successful booking writes exactly one public_bookings row and nothing el
   assert.equal(res.status, 200)
   assert.equal(db.raw.prepare('SELECT COUNT(*) AS n FROM public_bookings').get().n, 1)
   // call_state/bookings assertions dropped: meet-kit's schema.sql has no such
-  // tables (no cold-call pipeline), so there is nothing to prove isolation from.
+  // tables (no call-tracking pipeline), so there is nothing to prove isolation from.
 })
 
 test('the success response carries EXACTLY four keys and nothing else', async () => {
