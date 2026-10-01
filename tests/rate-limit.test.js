@@ -99,3 +99,17 @@ test('sweep deletes old windows and keeps recent ones', async () => {
   assert.ok(!starts.includes(0), `expected window 0 to be swept, got ${JSON.stringify(starts)}`)
   assert.ok(starts.includes(180), `expected the current window to survive, got ${JSON.stringify(starts)}`)
 })
+
+test('a successful sweep reports ok:true', async () => {
+  const db = realDB()
+  const r = await sweep(db, { windowSeconds: 60, now: 0 })
+  assert.equal(r.ok, true)
+})
+
+test('sweep reports failure via ok:false/error instead of swallowing it silently', async () => {
+  const db = throwingDB()
+  const r = await sweep(db, { windowSeconds: 60, now: 0 })
+  assert.equal(r.ok, false)
+  assert.ok(r.error instanceof Error)
+  assert.match(r.error.message, /boom: db unavailable/)
+})

@@ -150,13 +150,17 @@ export async function countRecentTotal(db, hours, now = Date.now()) {
  * bookings.
  *
  * NEVER throws: it runs inside waitUntil on a live request path, and a broken
- * purge must not take a booking or a slot lookup down with it.
+ * purge must not take a booking or a slot lookup down with it. A failure is
+ * still reported, not swallowed -- the returned `ok` flag is false and
+ * `error` carries the cause, so a caller that DOES care (the nightly cron in
+ * worker.js's scheduled()) can notice and surface it instead of a retention
+ * promise that silently stopped being kept.
  */
 export const IP_RETENTION_DAYS = 30
 export const RECORD_RETENTION_MONTHS = 24
 
 export async function purgeExpired(db, { now = Date.now() } = {}) {
-  const result = { ipsCleared: 0, rowsDeleted: 0 }
+  const result = { ok: true, ipsCleared: 0, rowsDeleted: 0 }
   try {
     const ipCutoff = new Date(now - IP_RETENTION_DAYS * 86_400_000).toISOString()
     // Both tables. A cancelled booking is still a record of a real person, and
@@ -181,8 +185,11 @@ export async function purgeExpired(db, { now = Date.now() } = {}) {
       'DELETE FROM public_bookings_cancelled WHERE start_utc < ?'
     ).bind(cutoff.toISOString()).run()
     result.rowsDeleted = (del?.meta?.changes ?? 0) + (delCancelled?.meta?.changes ?? 0)
-  } catch {
-    // Swallow: see the header. Retention is best-effort on a live path.
+  } catch (error) {
+    // Still never throw: see the header. Retention is best-effort on a live
+    // path -- but the failure is now visible on the return value.
+    result.ok = false
+    result.error = error
   }
   return result
 }

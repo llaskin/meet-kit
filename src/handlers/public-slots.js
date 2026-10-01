@@ -13,7 +13,9 @@ const json = (status, body) => Response.json(body, { status })
 // edge-local. These bound the fan-out reaching Google and Zoho, not the number
 // of humans served: a cache HIT costs neither.
 const MISS_LIMIT = 20
-const MISS_WINDOW_SECONDS = 60
+// Exported so worker.js's nightly sweep uses this exact value instead of a
+// second, independently-maintained literal that could drift from it.
+export const MISS_WINDOW_SECONDS = 60
 
 /**
  * Public availability.

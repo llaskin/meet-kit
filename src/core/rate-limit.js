@@ -56,14 +56,25 @@ export async function consume(db, { bucket, limit, windowSeconds, now = Date.now
  * Delete counters older than `keepWindows` windows. Called opportunistically
  * (not on a schedule) so the table doesn't grow unbounded; safe to skip a
  * run or call redundantly.
+ *
+ * Still NEVER throws (unchanged from before -- this runs on a live request
+ * path via public-slots.js's waitUntil, and a broken sweep must not take that
+ * down). What changed is that a failure is now reported in the return value
+ * (`{ ok: false, error }`) instead of vanishing silently, so a caller that
+ * DOES care -- the nightly cron in worker.js's scheduled() -- can notice and
+ * surface it.
+ *
+ * @returns {Promise<{ ok: true } | { ok: false, error: unknown }>}
  */
 export async function sweep(db, { windowSeconds, keepWindows = 3, now = Date.now() }) {
   try {
     const currentWindow = windowStartFor(now, windowSeconds)
     const cutoff = currentWindow - (keepWindows - 1) * windowSeconds
     await db.prepare('DELETE FROM rate_counters WHERE window_start < ?').bind(cutoff).run()
-  } catch {
-    // Sweeping is best-effort housekeeping, not correctness-critical --
-    // never let it take the caller down either.
+    return { ok: true }
+  } catch (error) {
+    // Sweeping is best-effort housekeeping, not correctness-critical -- never
+    // let it take the caller down either. See the doc comment above.
+    return { ok: false, error }
   }
 }

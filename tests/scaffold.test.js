@@ -6,7 +6,16 @@ const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8')
 
 test('wrangler.jsonc routes admin and api through the Worker first', () => {
   const w = read('wrangler.jsonc')
-  assert.match(w, /"run_worker_first":\s*\["\/admin\/\*",\s*"\/api\/\*"\]/)
+  // '/admin' (bare, no trailing slash) is listed explicitly alongside
+  // '/admin/*': Cloudflare's run_worker_first glob matching does not treat
+  // '/admin/*' as covering the bare path, so without this the Access gate
+  // would never even run for a request to exactly '/admin'.
+  assert.match(w, /"run_worker_first":\s*\["\/admin",\s*"\/admin\/\*",\s*"\/api\/\*"\]/)
+})
+
+test('wrangler.jsonc enables observability', () => {
+  const w = read('wrangler.jsonc')
+  assert.match(w, /"observability":\s*\{\s*"enabled":\s*true\s*\}/)
 })
 
 test('wrangler.jsonc declares no secret values', () => {

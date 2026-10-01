@@ -10,9 +10,13 @@
     "html_handling": "auto-trailing-slash",
     "not_found_handling": "404-page",
     // Admin pages and every API route go through the Worker first, so the
-    // Access JWT check covers admin HTML too, not just admin JSON.
-    "run_worker_first": ["/admin/*", "/api/*"]
+    // Access JWT check covers admin HTML too, not just admin JSON. '/admin'
+    // (bare, no trailing slash) is listed explicitly alongside '/admin/*' --
+    // Cloudflare's run_worker_first glob matching does not treat '/admin/*'
+    // as covering the bare path on its own.
+    "run_worker_first": ["/admin", "/admin/*", "/api/*"]
   },
+  "observability": { "enabled": true },
   "d1_databases": [
     // DEPLOY-AGENT.md step 3 replaces REPLACE_WITH_D1_ID.
     { "binding": "DB", "database_name": "meet-kit", "database_id": "REPLACE_WITH_D1_ID" }

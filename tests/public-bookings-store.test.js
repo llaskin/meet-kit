@@ -135,3 +135,17 @@ test('a purge failure never propagates', async () => {
   const broken = { prepare() { throw new Error('D1 unavailable') } }
   await assert.doesNotReject(() => purgeExpired(broken, { now: Date.now() }))
 })
+
+test('purge reports failure via ok:false/error instead of swallowing it silently', async () => {
+  const broken = { prepare() { throw new Error('D1 unavailable') } }
+  const r = await purgeExpired(broken, { now: Date.now() })
+  assert.equal(r.ok, false)
+  assert.ok(r.error instanceof Error)
+  assert.match(r.error.message, /D1 unavailable/)
+})
+
+test('a successful purge reports ok:true', async () => {
+  const db = realDB()
+  const r = await purgeExpired(db, { now: Date.now() })
+  assert.equal(r.ok, true)
+})

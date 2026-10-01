@@ -10,6 +10,7 @@ import { verifyAccess } from './core/access-jwt.js'
 import { purgeExpired } from './core/public-bookings.js'
 import { sweep } from './core/rate-limit.js'
 import * as publicSlots from './handlers/public-slots.js'
+import { MISS_WINDOW_SECONDS } from './handlers/public-slots.js'
 import * as publicBook from './handlers/public-book.js'
 import * as publicSite from './handlers/public-site.js'
 import * as adminConfig from './handlers/admin-config.js'
@@ -77,21 +78,72 @@ const asciiLower = (s) => s.replace(/[A-Z]/g, (c) => c.toLowerCase())
 // '/admin' or '/admin/' -- rather than being decoded all the way through to
 // '/admin/a/'. That is intentional: this gate must not itself become a
 // double-decode vector in the other direction.
-export const isAdminPath = (p) => {
-  let decoded
+function canonicalPath(p) {
   try {
-    decoded = decodeURIComponent(p)
+    return asciiLower(decodeURIComponent(p).replace(/\/+/g, '/'))
   } catch {
-    return true // Malformed percent-encoding: fail closed, treat as admin.
+    return null // Malformed percent-encoding: caller fails closed.
   }
-  const canon = asciiLower(decoded.replace(/\/+/g, '/'))
+}
+
+export const isAdminPath = (p) => {
+  const canon = canonicalPath(p)
+  if (canon === null) return true // Malformed percent-encoding: fail closed, treat as admin.
   return ADMIN_PREFIXES.some((pre) => canon === pre || canon.startsWith(`${pre}/`))
 }
 
+// '/api/admin/*' specifically (not '/admin/*' HTML/OAuth), for the
+// Content-Type check below -- same canonicalisation, same fail-closed
+// behaviour on an unparseable path as isAdminPath.
+const API_ADMIN_PREFIX = '/api/admin'
+const isAdminApiPath = (p) => {
+  const canon = canonicalPath(p)
+  if (canon === null) return true
+  return canon === API_ADMIN_PREFIX || canon.startsWith(`${API_ADMIN_PREFIX}/`)
+}
+
+// Test-only seam: tests assign gateOptions.getKey to a local JWKS (jose's
+// createLocalJWKSet) so they can sign a real, verifiable Access token without
+// ever touching Cloudflare's real certs endpoint. Production code never sets
+// this, so verifyAccess falls back to its own createRemoteJWKSet(team),
+// exactly as before this seam existed.
+export const gateOptions = { getKey: undefined }
+
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
+
 app.use('*', async (c, next) => {
   if (!isAdminPath(c.req.path)) return next()
-  const v = await verifyAccess(c.req.raw, c.env)
+  const v = await verifyAccess(c.req.raw, c.env, gateOptions)
   if (!v.ok) return c.json({ error: 'Forbidden' }, 403)
+
+  // CSRF. Cloudflare Access's CF_Authorization cookie is SameSite=None by
+  // default, so a cross-site "simple" request (e.g. a plain <form> POST,
+  // which needs no CORS preflight) still carries the cookie and would
+  // otherwise sail through the check above. GET/HEAD/OPTIONS are exempt --
+  // the Google/Zoho OAuth callback is a top-level cross-site GET (the
+  // provider's own redirect back to us) and must keep working.
+  if (!SAFE_METHODS.has(c.req.method)) {
+    const secFetchSite = c.req.header('Sec-Fetch-Site')
+    const origin = c.req.header('Origin')
+    const here = new URL(c.req.url).origin
+    const crossSite = (secFetchSite && secFetchSite !== 'same-origin') || (origin && origin !== here)
+    if (crossSite) return c.json({ error: 'Forbidden' }, 403)
+
+    // /api/admin/* admin JSON writes specifically: a browser's plain <form>
+    // POST can only ever send a handful of content types (none of them
+    // application/json without JS setting a custom header, which itself
+    // requires a CORS preflight for a cross-origin target) -- so requiring
+    // JSON here closes the one no-preflight path the Origin/Sec-Fetch-Site
+    // check above doesn't fully cover on its own (a browser that omits both
+    // headers entirely).
+    if (isAdminApiPath(c.req.path)) {
+      const contentType = asciiLower(c.req.header('Content-Type') || '')
+      if (!contentType.startsWith('application/json')) {
+        return c.json({ error: 'Unsupported Media Type' }, 415)
+      }
+    }
+  }
+
   c.set('owner', v.email)
   return next()
 })
@@ -146,10 +198,25 @@ app.onError(handleWorkerError)
 export default {
   fetch: app.fetch,
   // Nightly retention (wrangler.jsonc triggers.crons). purgeExpired and sweep
-  // never throw -- see their own header comments -- but scheduled() must not
-  // depend on that to stay safe, so each is also wrapped here.
-  async scheduled(_event, env, ctx) {
-    ctx.waitUntil(purgeExpired(env.DB).catch(() => {}))
-    ctx.waitUntil(sweep(env.DB, { windowSeconds: 60 }).catch(() => {}))
+  // still never throw -- see their own header comments -- they now report a
+  // failure via `{ ok: false, error }` instead of swallowing it, and THIS is
+  // the one caller that cares: a retention run that silently fails is a
+  // privacy-policy promise silently broken, so a failure here is logged and
+  // rethrown, which Cloudflare surfaces as a failed cron run.
+  async scheduled(_event, env) {
+    const [purgeResult, sweepResult] = await Promise.all([
+      purgeExpired(env.DB),
+      sweep(env.DB, { windowSeconds: MISS_WINDOW_SECONDS }),
+    ])
+    let failure = null
+    if (!purgeResult.ok) {
+      console.error('[meet-kit] retention failed', { step: 'purgeExpired', error: String(purgeResult.error) })
+      failure = purgeResult.error
+    }
+    if (!sweepResult.ok) {
+      console.error('[meet-kit] retention failed', { step: 'sweep', error: String(sweepResult.error) })
+      failure = sweepResult.error
+    }
+    if (failure) throw failure
   },
 }

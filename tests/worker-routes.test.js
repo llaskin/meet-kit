@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { Hono } from 'hono'
-import { app, ADMIN_PREFIXES, handleWorkerError } from '../src/worker.js'
+import { generateKeyPair, exportJWK, SignJWT, createLocalJWKSet } from 'jose'
+import { app, ADMIN_PREFIXES, handleWorkerError, gateOptions } from '../src/worker.js'
 import { realDB } from './helpers/d1.js'
 import { savePublicBooking } from '../src/core/public-bookings.js'
 
@@ -13,12 +14,31 @@ const ENV = (db) => ({
   ACCESS_TEAM_DOMAIN: 'https://team.cloudflareaccess.com', ACCESS_AUD: 'aud', OWNER_EMAIL: 'owner@example.com',
 })
 
+// --- Positive-path Access token (item 1) + CSRF (item 2) fixtures ----------
+//
+// gateOptions.getKey is the test-only seam worker.js exports: it is threaded
+// as verifyAccess's 3rd-arg `getKey`, letting these tests sign tokens against
+// a LOCAL JWKS instead of the real Cloudflare certs endpoint. Every test that
+// sets it must restore it to `undefined` afterward (see each test's finally),
+// so an untouched test run never depends on gateOptions state.
+const TEAM = 'https://team.cloudflareaccess.com'
+const AUD = 'aud'
+const OWNER = 'owner@example.com'
+const { publicKey, privateKey } = await generateKeyPair('RS256')
+const jwk = { ...(await exportJWK(publicKey)), kid: 'k1', alg: 'RS256', use: 'sig' }
+const localJWKS = createLocalJWKSet({ keys: [jwk] })
+
+async function ownerToken({ email = OWNER } = {}) {
+  return new SignJWT({ email }).setProtectedHeader({ alg: 'RS256', kid: 'k1' })
+    .setIssuer(TEAM).setAudience(AUD).setIssuedAt().setExpirationTime('5m').sign(privateKey)
+}
+
 const adminRoutes = () => app.routes
   .filter((r) => ADMIN_PREFIXES.some((p) => r.path.startsWith(p)))
   .map((r) => ({ method: r.method === 'ALL' ? 'GET' : r.method, path: r.path.replace(':provider', 'google').replace(':id', 'google%3Aowner%40example.com') }))
 
 test('there are admin routes to check', () => {
-  assert.ok(adminRoutes().length >= 7)
+  assert.ok(adminRoutes().length >= 11, `expected at least 11 admin routes, got ${adminRoutes().length}`)
 })
 
 test('every admin route refuses a request with no Access token', async () => {
@@ -47,6 +67,157 @@ test('public routes are reachable without a token', async () => {
   const db = realDB()
   const res = await app.request('/api/public/site', {}, ENV(db), ctx)
   assert.equal(res.status, 200)
+})
+
+// --- Positive-path Access token via the gateOptions.getKey seam (item 1) ---
+
+test('a valid Access token (via gateOptions.getKey) reaches the admin handler', async () => {
+  const db = realDB()
+  gateOptions.getKey = localJWKS
+  try {
+    const token = await ownerToken()
+    const res = await app.request('/api/admin/bookings', { headers: { 'Cf-Access-Jwt-Assertion': token } }, ENV(db), ctx)
+    assert.equal(res.status, 200)
+  } finally {
+    gateOptions.getKey = undefined
+  }
+})
+
+test('a valid token for the wrong email is still 403', async () => {
+  const db = realDB()
+  gateOptions.getKey = localJWKS
+  try {
+    const token = await ownerToken({ email: 'someone-else@example.com' })
+    const res = await app.request('/api/admin/bookings', { headers: { 'Cf-Access-Jwt-Assertion': token } }, ENV(db), ctx)
+    assert.equal(res.status, 403)
+  } finally {
+    gateOptions.getKey = undefined
+  }
+})
+
+test('the gate threads the verified owner email into the handler (recorded as cancelled_by)', async () => {
+  const db = realDB()
+  await savePublicBooking(db, {
+    id: 'booking-1', email: 'guest@example.com', name: 'Guest', durationMinutes: 30,
+    startUtc: '2026-11-01T13:00:00.000Z', endUtc: '2026-11-01T13:30:00.000Z',
+  })
+  gateOptions.getKey = localJWKS
+  try {
+    const token = await ownerToken()
+    const res = await app.request('/api/admin/cancel', {
+      method: 'POST',
+      headers: { 'Cf-Access-Jwt-Assertion': token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: 'booking-1' }),
+    }, ENV(db), ctx)
+    assert.equal(res.status, 200)
+    const row = db.raw.prepare('SELECT cancelled_by FROM public_bookings_cancelled WHERE id = ?').get('booking-1')
+    assert.equal(row.cancelled_by, OWNER)
+  } finally {
+    gateOptions.getKey = undefined
+  }
+})
+
+// --- CSRF on admin writes (item 2) -----------------------------------------
+//
+// Cloudflare Access's CF_Authorization cookie is SameSite=None, so a
+// cross-site simple POST carries it and clears the Access check above on its
+// own -- these tests all use a VALID token and still expect the extra CSRF
+// check to decide the outcome.
+
+test('CSRF: cross-site Origin + Sec-Fetch-Site + non-JSON content-type is 403 even with a valid token', async () => {
+  const db = realDB()
+  gateOptions.getKey = localJWKS
+  try {
+    const token = await ownerToken()
+    const res = await app.request('/api/admin/cancel', {
+      method: 'POST',
+      headers: {
+        'Cf-Access-Jwt-Assertion': token,
+        'Content-Type': 'text/plain',
+        Origin: 'https://evil.example.com',
+        'Sec-Fetch-Site': 'cross-site',
+      },
+      body: JSON.stringify({ id: 'nope' }),
+    }, ENV(db), ctx)
+    assert.equal(res.status, 403)
+  } finally {
+    gateOptions.getKey = undefined
+  }
+})
+
+test('CSRF: same-origin JSON passes the gate', async () => {
+  const db = realDB()
+  gateOptions.getKey = localJWKS
+  try {
+    const token = await ownerToken()
+    const res = await app.request('/api/admin/config', {
+      method: 'PUT',
+      headers: {
+        'Cf-Access-Jwt-Assertion': token,
+        'Content-Type': 'application/json',
+        Origin: 'http://localhost',
+        'Sec-Fetch-Site': 'same-origin',
+      },
+      body: JSON.stringify({}),
+    }, ENV(db), ctx)
+    assert.equal(res.status, 200)
+  } finally {
+    gateOptions.getKey = undefined
+  }
+})
+
+test('CSRF: a non-browser request with no Origin/Sec-Fetch-Site and JSON content-type passes', async () => {
+  const db = realDB()
+  gateOptions.getKey = localJWKS
+  try {
+    const token = await ownerToken()
+    const res = await app.request('/api/admin/config', {
+      method: 'PUT',
+      headers: { 'Cf-Access-Jwt-Assertion': token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    }, ENV(db), ctx)
+    assert.equal(res.status, 200)
+  } finally {
+    gateOptions.getKey = undefined
+  }
+})
+
+test('CSRF: /api/admin/* non-GET with non-JSON content-type is 415 even same-origin', async () => {
+  const db = realDB()
+  gateOptions.getKey = localJWKS
+  try {
+    const token = await ownerToken()
+    const res = await app.request('/api/admin/config', {
+      method: 'PUT',
+      headers: { 'Cf-Access-Jwt-Assertion': token, 'Content-Type': 'text/plain' },
+      body: '{}',
+    }, ENV(db), ctx)
+    assert.equal(res.status, 415)
+  } finally {
+    gateOptions.getKey = undefined
+  }
+})
+
+test('CSRF: GET with cross-site headers is still allowed (OAuth callback is a top-level cross-site GET)', async () => {
+  const db = realDB()
+  gateOptions.getKey = localJWKS
+  try {
+    const token = await ownerToken()
+    const res = await app.request('/api/admin/bookings', {
+      headers: { 'Cf-Access-Jwt-Assertion': token, Origin: 'https://accounts.google.com', 'Sec-Fetch-Site': 'cross-site' },
+    }, ENV(db), ctx)
+    assert.equal(res.status, 200)
+  } finally {
+    gateOptions.getKey = undefined
+  }
+})
+
+// --- GET /admin/bookings: no dedicated route, falls under /admin/* (item 5) -
+
+test('GET /admin/bookings (no dedicated route) is still gated without a token', async () => {
+  const db = realDB()
+  const res = await app.request('/admin/bookings', {}, ENV(db), ctx)
+  assert.equal(res.status, 403)
 })
 
 // These are near-misses by STRING -- they merely contain "admin" as a
@@ -162,4 +333,20 @@ test('scheduled() runs both purgeExpired and the rate-limit sweep', async () => 
 
   const remainingCounter = await db.prepare('SELECT COUNT(*) AS n FROM rate_counters WHERE bucket = ?').bind('slots:30').first()
   assert.equal(remainingCounter.n, 0, 'sweep should have deleted the old rate counter')
+})
+
+test('scheduled() logs and rejects when retention fails (item 3)', async () => {
+  const worker = (await import('../src/worker.js')).default
+  const originalError = console.error
+  const logs = []
+  console.error = (...args) => logs.push(args)
+  try {
+    await assert.rejects(() => worker.scheduled({}, { DB: undefined }, ctx))
+  } finally {
+    console.error = originalError
+  }
+  assert.ok(
+    logs.some(([msg]) => msg === '[meet-kit] retention failed'),
+    `expected a '[meet-kit] retention failed' console.error, got ${JSON.stringify(logs)}`,
+  )
 })
