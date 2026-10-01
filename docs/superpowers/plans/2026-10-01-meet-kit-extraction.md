@@ -32,6 +32,12 @@
   - `public/calendar-config.html` becomes the new `public/admin/index.html` (Task 11).
 - **Worker routing:** Workers static assets support `run_worker_first` as an array of route patterns ([docs](https://developers.cloudflare.com/workers/static-assets/binding/)). meet-kit uses `["/admin/*", "/api/*"]` so admin HTML is gated by the Worker too.
 
+## Accepted deviations from the spec
+
+- `src/core/public-cache.js` uses the Workers `caches` global, so it is not strictly Cloudflare-free; it already injects it via `cacheImpl` and is stubbed in tests. Kept in `core/` with its siblings.
+- `CF-Connecting-IP` is read in `src/handlers/public-book.js` (the handler layer), not in `worker.js`. Handlers are part of the Worker layer; `src/core/` still never reads headers or `env`.
+- README's upstream instructions use a placeholder URL rather than `llaskin/meet-kit` (see Task 13).
+
 ## File map
 
 | File | Responsibility |
@@ -58,6 +64,15 @@
 | `README.md`, `DEPLOY-AGENT.md`, `CLAUDE.md`, `LICENSE` | docs |
 
 Throughout: run tests with `npm test` (= `node --test tests/`). Print `date '+%H:%M:%S'` before and after every suite run.
+
+---
+
+### Pre-flight: feature branch
+
+Leo's rules put spec/plan work on a feature branch, not `main`.
+
+- [ ] Run: `cd /Users/leolaskin/Development/meet-kit && git checkout -b feat/meet-kit-v1 && git status -sb | head -1`
+  Expected: `## feat/meet-kit-v1`. All task commits below land on this branch.
 
 ---
 
@@ -553,8 +568,10 @@ for (const name of process.argv.slice(2)) {
 
 ```bash
 node scripts/port-test.mjs slots tz durations google-calendar google-delete-event zoho-calendar \
-  oauth-state turnstile rate-limit public-cache public-bookings-store cancellation-store
+  oauth-state turnstile rate-limit public-cache public-bookings-store
 ```
+
+(`cancellation-store` is ported in Task 4: it imports `calendar-store.js`, which does not exist until then.)
 
 Expected: every line ends `clean`. For any `RESIDUE` line, open that file, replace the remaining value with a neutral `example.com` value by hand, and note it in the baseline's "Port notes" column.
 
@@ -677,8 +694,10 @@ The signature changes from `cancelBooking(db, {source, ...})` to `cancelBooking(
 - [ ] **Step 4: Port and adapt the two tests**
 
 ```bash
-node scripts/port-test.mjs calendar-store cancel-booking
+node scripts/port-test.mjs calendar-store cancel-booking cancellation-store
 ```
+
+In `tests/cancellation-store.test.js`, delete every `test(...)` exercising internal (`bookings` table) cancellation (`cancelInternalBooking`, `getInternalBooking`, `saveBooking`) and record the count.
 
 Then:
 - In `tests/calendar-store.test.js`, delete every `test(...)` block that calls one of the six functions removed in Step 1. Count them and record "N tests removed: call-sheet tables not in meet-kit" in the baseline doc.
@@ -928,7 +947,7 @@ export async function verifyAccess(request, env, { getKey } = {}) {
 - [ ] **Step 4: Run to verify it passes**
 
 Run: `node --test tests/access-jwt.test.js`
-Expected: 15 pass (1 valid + 5 parameterised + different key + none + HS256 + missing + 3 unset + normalise).
+Expected: 14 pass (1 valid + 5 parameterised + different key + none + HS256 + missing + 3 unset + normalise).
 
 - [ ] **Step 5: Commit**
 
@@ -1328,6 +1347,7 @@ Copy `$SRC/functions/api/public/slots.js`, then make exactly these changes:
 2. Delete the `purgeExpired` import and the `waitUntil(purgeExpired(db))` line plus its comment. Retention moves to the cron (Task 10).
 3. `const db = env.CALL_STATE_DB` → `const db = env.DB`.
 4. `const cfg = await store.getConfig(db)` → `const cfg = await loadCfg(db, env)`, and add `import { loadCfg } from './context.js'`.
+5. Replace both hardcoded `'America/New_York'` fallbacks with `store.DEFAULT_RULES.timezone`, so the default time zone lives in one place (`src/core/calendar-store.js`).
 
 - [ ] **Step 3: Write `src/handlers/public-book.js`**
 
@@ -1966,6 +1986,7 @@ Then fix `tests/calendar-oauth.test.js`, recording each change in Port notes:
 - Expected redirect URIs: `/api/calendar/callback/` → `/admin/oauth/`, with `/callback` appended after the provider.
 - Expected failure redirects: `/calendar-config.html` → `/admin/`.
 - A test asserting a denied consent returns JSON 400 now expects a 302 to `/admin/?error=...`.
+- Add one test: `start({ params: { provider: 'zoho' } })` with `?role=write` returns 400, and a `callback` whose signed state carries `{ provider: 'zoho', role: 'write' }` returns 400 and saves no connection (spec: "Zoho cannot become the write connection").
 - Add one test: after a Google `write` callback, `write_calendar_id` equals the primary calendar id and `write_calendar_meet` is `'1'` when the stubbed `calendarList` entry includes `hangoutsMeet`.
 
 - [ ] **Step 10: Run**
@@ -1998,7 +2019,7 @@ const ctx = { waitUntil() {}, passThroughOnException() {} }
 const ENV = (db) => ({
   DB: db,
   // Mirrors real assets: admin pages and /meet exist, anything else 404s.
-  ASSETS: { fetch: async (r) => (/^\/(admin|meet)/.test(new URL(r.url).pathname) ? new Response('asset') : new Response('nf', { status: 404 })) },
+  ASSETS: { fetch: async (r) => ((p) => (p === '/meet' || p === '/admin' || p.startsWith('/admin/')) ? new Response('asset') : new Response('nf', { status: 404 }))(new URL(r.url).pathname) },
   ACCESS_TEAM_DOMAIN: 'https://team.cloudflareaccess.com', ACCESS_AUD: 'aud', OWNER_EMAIL: 'owner@example.com',
 })
 
@@ -2195,7 +2216,7 @@ Copy `$SRC/public/meet.html`, then:
   `<p class="notice" id="meet-notice">We use your details to send the calendar invite and to prevent abuse.</p>`
 - Replace the footer with `<p class="foot" id="meet-foot"></p>`.
 - Scripts: `/booking.js` → `/picker.js`.
-- In the `<style>`, replace both literal `#0b6cff` with `var(--accent)` and add `:root{--accent:#0b6cff}` at the top.
+- In the `<style>`, replace every literal `#0b6cff` with `var(--accent)` (verify after: `grep -c '#0b6cff' public/meet.html` → `1`, the `:root` default) and add `:root{--accent:#0b6cff}` at the top.
 
 - [ ] **Step 3: Write `public/meet.js`**
 
@@ -2673,6 +2694,7 @@ Write it from spec section 3 (steps 0–10), with every command exact and every 
   - The status list should show the booking account connected.
   - Read the "Unique Meet links" line and report it to the agent.
   - If it says not available, set a fixed meeting link and Save.
+  - **Set the time zone, weekdays and working hours, then Save.** The defaults are America/New_York, Mon–Fri, 09:00–17:00; leaving them means offering Eastern business hours.
   - Add busy accounts and Zoho as wanted.
 - **10 End-to-end:**
   - The user books `<url>/meet` from a *different* email.
@@ -2773,6 +2795,16 @@ git commit -m "chore: move build history out of the template tree"
 ```
 
 Then remove `'docs'` from `SKIP_DIRS` in `tests/leak-check.test.js` and re-run `npm test`. It must still pass. Commit.
+
+Update the two pointers that named the old in-repo paths:
+- `~/Documents/MyApps/meet-kit/Overview.md`: spec/plan now under `~/Documents/MyApps/meet-kit/history/`.
+- the memory note `project_meet_kit_self_hosted_template.md`: same path change.
+
+Merge to `main` on a green suite:
+
+```bash
+npm test && git checkout main && git merge --no-ff feat/meet-kit-v1 -m "Merge feat/meet-kit-v1: meet-kit v1" && npm test && git branch -d feat/meet-kit-v1
+```
 
 - [ ] **Step 3: Push and mark as template**
 
