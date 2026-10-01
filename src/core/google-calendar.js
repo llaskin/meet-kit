@@ -38,9 +38,10 @@ function timeWindows(timeMin, timeMax, maxDays = FREEBUSY_MAX_DAYS) {
 export const GOOGLE_SCOPES = [
   'https://www.googleapis.com/auth/calendar.freebusy',
   'https://www.googleapis.com/auth/calendar.calendarlist.readonly',
-  // Needed in Phase 2 to create the booking event. v1 pastes a fixed Meet link
-  // rather than requesting conferenceData, so the scope question that would
-  // arise with auto-generated conferences does not apply here.
+  // Creates the booking event, including a unique Meet room via
+  // conferenceData.createRequest (see video-link.js). That this scope alone is
+  // enough for conference creation is not yet confirmed live; see
+  // DEPLOY-AGENT.md "Known unverified".
   'https://www.googleapis.com/auth/calendar.events',
 ].join(' ')
 
