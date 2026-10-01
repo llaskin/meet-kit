@@ -10,7 +10,7 @@ export function realDB() {
   const db = new DatabaseSync(':memory:')
   db.exec(SCHEMA)
   const wrap = (sql) => ({
-    args: [],
+    sql, args: [],
     bind(...a) { this.args = a; return this },
     async run() {
       const r = db.prepare(sql).run(...this.args)
@@ -22,11 +22,22 @@ export function realDB() {
   return {
     raw: db,
     prepare: wrap,
+    // Zero yield points between BEGIN and COMMIT: two "concurrent" batch()
+    // calls on this one shared synchronous connection must not interleave,
+    // or the second's BEGIN throws "cannot start a transaction within a
+    // transaction" while the first is still open. A per-statement `await`
+    // here (even though run() itself has no internal await) hands control
+    // back to the microtask queue mid-transaction, which is exactly the gap
+    // a second pending continuation can land in. Mirrors the source tests'
+    // inline fixture, which ran its batch loop synchronously for the same
+    // reason.
     async batch(stmts) {
       db.exec('BEGIN')
       try {
-        const out = []
-        for (const s of stmts) out.push(await s.run())
+        const out = stmts.map((s) => {
+          const r = db.prepare(s.sql).run(...s.args)
+          return { success: true, meta: { changes: Number(r.changes) } }
+        })
         db.exec('COMMIT')
         return out
       } catch (e) { db.exec('ROLLBACK'); throw e }
