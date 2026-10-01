@@ -137,7 +137,7 @@ git commit -m "docs: record source test baseline for the port"
   "private": true,
   "type": "module",
   "license": "MIT",
-  "engines": { "node": ">=22.5" },
+  "engines": { "node": ">=22.13" },
   "scripts": {
     "test": "node --test tests/",
     "dev": "wrangler dev",
@@ -156,7 +156,7 @@ git commit -m "docs: record source test baseline for the port"
 }
 ```
 
-`node:sqlite` needs Node 22.5+, hence `engines`.
+`node:sqlite` works without a flag from Node 22.13 (and 23.4), hence `engines`.
 
 - [ ] **Step 2: Install**
 
