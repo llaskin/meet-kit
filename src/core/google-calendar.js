@@ -131,6 +131,8 @@ export async function listCalendars(accessToken) {
       id: c.id,
       name: c.summaryOverride || c.summary || c.id,
       primary: Boolean(c.primary),
+      // Whether Google will mint a unique Meet room on this calendar.
+      meet: (c.conferenceProperties?.allowedConferenceSolutionTypes || []).includes('hangoutsMeet'),
     }))
 }
 
@@ -180,55 +182,84 @@ export async function freeBusy(accessToken, calendarIds, timeMin, timeMax) {
 }
 
 /**
- * Create a calendar event carrying a pre-existing meeting link.
+ * Create a calendar event.
  *
- * No conferenceData is requested: v1 reuses one fixed Meet link from config
- * rather than minting a code per event (see the spec's "Why a single fixed Meet
- * link"). Switching to per-meeting codes later means adding a createRequest
- * here plus polling until the conference reports success -- contained to this
- * function.
+ * conference: true asks Google to mint a unique Meet room
+ * (conferenceData.createRequest + conferenceDataVersion=1). Creation is
+ * asynchronous: the response may report status 'pending'; see video-link.js.
  *
  * sendUpdates=all is not optional. Without it Google creates the event and
- * emails nobody, which is the single most common "why didn't they get the
- * invite" failure.
+ * emails nobody.
  */
 export async function createEvent(accessToken, {
   calendarId, summary, description, location,
-  startIso, endIso, timeZone, attendeeEmail, attendeeName, internalEmail,
+  startIso, endIso, timeZone, attendeeEmail, attendeeName, internalEmail, conference = false,
 }) {
   const attendee = { email: attendeeEmail }
   if (attendeeName) attendee.displayName = attendeeName
   const attendees = [attendee]
-
-  // The account that owns this calendar is the ORGANIZER and is already on the
-  // event; adding it as its own guest is redundant. internalEmail is for a
-  // different address -- typically the operator's real working inbox, which is
-  // not the Google account the tool writes to. Without it a booked meeting
-  // lands only on an account they may never open.
   if (internalEmail && internalEmail.toLowerCase() !== attendeeEmail.toLowerCase()) {
     attendees.push({ email: internalEmail })
   }
 
+  const payload = {
+    summary, description, location,
+    start: { dateTime: startIso, timeZone },
+    end: { dateTime: endIso, timeZone },
+    attendees,
+  }
+  let qs = 'sendUpdates=all'
+  if (conference) {
+    payload.conferenceData = {
+      createRequest: { requestId: crypto.randomUUID(), conferenceSolutionKey: { type: 'hangoutsMeet' } },
+    }
+    qs += '&conferenceDataVersion=1'
+  }
+
   const res = await googleApi.fetch(
-    `${API}/calendars/${encodeURIComponent(calendarId)}/events?sendUpdates=all`,
+    `${API}/calendars/${encodeURIComponent(calendarId)}/events?${qs}`,
     {
       method: 'POST',
       headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        summary,
-        description,
-        location,
-        start: { dateTime: startIso, timeZone },
-        end: { dateTime: endIso, timeZone },
-        attendees,
-      }),
+      body: JSON.stringify(payload),
     },
   )
   const body = await res.json().catch(() => ({}))
   if (!res.ok) {
     throw new Error(`Google event creation failed: ${body?.error?.message || res.status}`)
   }
-  return { eventId: body.id, htmlLink: body.htmlLink || '' }
+  return {
+    eventId: body.id,
+    htmlLink: body.htmlLink || '',
+    meetUrl: body.hangoutLink || '',
+    conferenceStatus: body.conferenceData?.createRequest?.status?.statusCode || '',
+  }
+}
+
+export async function getEvent(accessToken, { calendarId, eventId }) {
+  const res = await googleApi.fetch(
+    `${API}/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`,
+    { headers: { Authorization: `Bearer ${accessToken}` } },
+  )
+  const body = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(`Google event read failed: ${res.status}`)
+  return {
+    meetUrl: body.hangoutLink || '',
+    conferenceStatus: body.conferenceData?.createRequest?.status?.statusCode || '',
+  }
+}
+
+/** Swap a failed/pending conference for the owner's fixed link; guests are re-notified. */
+export async function patchEventLink(accessToken, { calendarId, eventId, link }) {
+  const res = await googleApi.fetch(
+    `${API}/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}?sendUpdates=all&conferenceDataVersion=1`,
+    {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ location: link, description: `Join the meeting: ${link}`, conferenceData: null }),
+    },
+  )
+  if (!res.ok) throw new Error(`Google event patch failed: ${res.status}`)
 }
 
 /**

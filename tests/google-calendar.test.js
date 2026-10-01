@@ -46,7 +46,7 @@ test('listCalendars returns id, name and primary flag', async () => {
   )
   const cals = await listCalendars('at-1')
   assert.equal(cals.length, 2)
-  assert.deepEqual(cals[0], { id: 'owner@example.com', name: 'owner@example.com', primary: true })
+  assert.deepEqual(cals[0], { id: 'owner@example.com', name: 'owner@example.com', primary: true, meet: false })
   // summaryOverride is the user's own rename and wins over summary.
   assert.equal(cals[1].name, 'Family Stuff')
   assert.equal(cals[1].primary, false)
