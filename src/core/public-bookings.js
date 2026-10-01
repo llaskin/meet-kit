@@ -17,13 +17,14 @@ export async function savePublicBooking(db, b) {
   await db.prepare(
     `INSERT INTO public_bookings
        (id, created_at, attendee_email, cap_identity, attendee_name, company, notes,
-        duration_min, start_utc, end_utc, event_id, meet_url, client_ip, calendar_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        duration_min, start_utc, end_utc, event_id, meet_url, client_ip, calendar_id, meet_url_source)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).bind(
     id, createdAt, String(b.email || '').toLowerCase(),
     String(b.capIdentity || b.email || '').toLowerCase(), b.name || '', b.company || '',
     b.notes || '', b.durationMinutes, b.startUtc, b.endUtc,
     b.eventId || null, b.meetUrl || null, b.clientIp || null, b.calendarId || null,
+    b.meetUrlSource || null,
   ).run()
   return id
 }
@@ -67,15 +68,15 @@ export async function cancelPublicBooking(db, { row, cancelledAt, cancelledBy })
       `INSERT OR IGNORE INTO public_bookings_cancelled
          (id, created_at, attendee_email, cap_identity, attendee_name, company, notes,
           duration_min, start_utc, end_utc, event_id, meet_url, client_ip, calendar_id,
-          cancelled_at, cancelled_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          meet_url_source, cancelled_at, cancelled_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(
       row.id, row.created_at, row.attendee_email, row.cap_identity,
       row.attendee_name ?? null, row.company ?? null, row.notes ?? null,
       row.duration_min, row.start_utc, row.end_utc,
       row.event_id ?? null, row.meet_url ?? null, row.client_ip ?? null,
-      row.calendar_id ?? null, cancelledAt, cancelledBy ?? null,
+      row.calendar_id ?? null, row.meet_url_source ?? null, cancelledAt, cancelledBy ?? null,
     )
 
   const del = db.prepare(`DELETE FROM public_bookings WHERE id = ?`).bind(row.id)
