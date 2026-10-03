@@ -39,6 +39,12 @@ test('custom: accepted examples, whitespace collapsed', () => {
     ['Café chat', 'Café chat'],
     ['  e.g.   pricing  ', 'e.g. pricing'],
     ["Owner's renewal, v2", "Owner's renewal, v2"],
+    ['Q3 2026 planning', 'Q3 2026 planning'],
+    ['800 employees rollout', '800 employees rollout'],
+    ['v2.0 upgrade', 'v2.0 upgrade'],
+    ['Pricing for 3-5 sites', 'Pricing for 3-5 sites'],
+    ['ISO 9001 audit', 'ISO 9001 audit'],
+    ['Zürich office', 'Zürich office'],
   ]) assert.deepEqual(validateCustomTopic(input), { ok: true, value }, input)
 })
 
@@ -47,6 +53,12 @@ test('custom: links, contacts, lookalikes, markup and lengths refused', () => {
     'http://x', 'see https now', 'www.x', 'a@b', 'evil.com', 'go to Example.org',
     'call 5551234567', '555 123 4567', 'раураl', '<b>x</b>', '', '   ',
     'a'.repeat(41), 'semi;colon', 'quote"d', null, 7,
+    // Vanity toll-free numbers: few digits, still dialable.
+    'Call 1-800-FLOWERS', 'Call 1-844-AMAZONX', '(855) GETHELP', 'call 1-800-flowers', '800-flowers now',
+    // Bare IPv4 addresses.
+    '8.8.8.8', 'go to 10.0.0.1',
+    // Look-alike letters outside the plain Latin blocks.
+    'ＷＷＷ example', 'Ⅰ-Ⅷ00', 'aꞏb',
   ]) {
     assert.deepEqual(validateCustomTopic(bad), { ok: false, error: CUSTOM_TOPIC_ERROR }, String(bad))
   }

@@ -17,11 +17,18 @@ export const CUSTOM_TOPIC_ERROR =
   'Please describe the topic in a few words, without links or contact details.'
 
 const CONTROL = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/
-// Latin script only: lookalike letters from other scripts are how
-// spoofed-domain text slips past a domain filter.
-const CUSTOM_ALLOWED = /^[\p{Script=Latin}0-9 \-'&,.()]+$/u
+// Plain Latin letters only (ASCII plus the accented Latin blocks, without
+// the x and / signs). Lookalikes -- other scripts, fullwidth forms, Roman
+// numerals, Latin pseudo-punctuation -- are how spoofed text slips past a
+// domain filter.
+const CUSTOM_ALLOWED = /^[A-Za-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u024F\u1E00-\u1EFF0-9 \-'&,.()]+$/u
 const DOMAIN_SHAPE = /[\p{L}\p{N}]\.\p{L}{2,}/u
 const LINKISH = /http|www|@/i
+const IPV4 = /\d+\.\d+\.\d+\.\d+/
+// Vanity phone numbers carry few digits but are fully dialable:
+// "1-800-FLOWERS", "(855) GETHELP", "800-flowers", "1 844 ...".
+const VANITY = /\d{3}\)?[\s.-]?[A-Z]{4,}/
+const TOLL_FREE = /\b8(?:00|33|44|55|66|77|88)-[A-Za-z]{3,}|\b1[\s.-]8(?:00|33|44|55|66|77|88)\b/i
 
 /** Owner's topic list from the admin page. */
 export function validateTopicList(list) {
@@ -53,7 +60,8 @@ export function validateCustomTopic(text) {
   const value = text.replace(/\s+/g, ' ').trim()
   if (!value || value.length > MAX_TOPIC_LENGTH) return fail
   if (!CUSTOM_ALLOWED.test(value)) return fail
-  if (LINKISH.test(value) || DOMAIN_SHAPE.test(value)) return fail
+  if (LINKISH.test(value) || DOMAIN_SHAPE.test(value) || IPV4.test(value)) return fail
+  if (VANITY.test(value) || TOLL_FREE.test(value)) return fail
   if ((value.match(/\d/g) || []).length >= 7) return fail
   return { ok: true, value }
 }
