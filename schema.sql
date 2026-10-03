@@ -1,7 +1,7 @@
 -- meet-kit D1 schema. Apply once:
 --   npx wrangler d1 execute meet-kit --remote --file=schema.sql
--- Later schema changes will ship as numbered files in migrations/, with the
--- apply command in each file's header.
+-- It already includes every migration in migrations/; existing deployments
+-- apply new migrations/NNN_*.sql files instead (see DEPLOY-AGENT.md).
 
 -- Key/value settings: rules_*, write_calendar_id, write_calendar_meet,
 -- meet_link, internal_attendee_email, zoho_account_email, state_signing_key.
