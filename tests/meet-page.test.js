@@ -3,7 +3,7 @@ import test from 'node:test'
 import { JSDOM } from 'jsdom'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { readForm, buildCard, formatWhen, showConfirmation, initMeet, applySite } from '../public/meet.js'
+import { readForm, buildCard, formatWhen, showConfirmation, initMeet, applySite, renderTopics, readTopic } from '../public/meet.js'
 
 // Drive the REAL page, not a fixture, so this cannot drift from what ships.
 const PAGE = readFileSync(fileURLToPath(new URL('../public/meet.html', import.meta.url)), 'utf8')
@@ -226,4 +226,42 @@ test('applySite leaves the footer empty when the owner sets no branding or links
 test('the page ships no hardcoded site key or owner branding', () => {
   // Split strings: see the note in the site-key test above.
   assert.doesNotMatch(PAGE, new RegExp(['0x4' + 'AAAA', 'aifind' + 'mybusiness', 'AI Find ' + 'My Business'].join('|'), 'i'))
+})
+
+test('topics: hidden when there are none', () => {
+  const doc = new JSDOM(PAGE).window.document
+  renderTopics(doc, { topics: [], allowOther: false })
+  assert.equal(doc.getElementById('meet-topic-wrap').hidden, true)
+})
+
+test('topics: options rendered as text, Other last, custom box shown only for Other', () => {
+  const doc = new JSDOM(PAGE).window.document
+  renderTopics(doc, { topics: ['Audit review', '<img src=x onerror=alert(1)>'], allowOther: true })
+  const sel = doc.getElementById('meet-topic')
+  assert.equal(doc.getElementById('meet-topic-wrap').hidden, false)
+  assert.deepEqual([...sel.options].map((o) => o.value), ['', 'Audit review', '<img src=x onerror=alert(1)>', '__other__'])
+  assert.equal(doc.querySelectorAll('img').length, 0)
+  assert.equal(doc.getElementById('meet-topic-custom-wrap').hidden, true)
+  sel.value = '__other__'
+  sel.dispatchEvent(new doc.defaultView.Event('change'))
+  assert.equal(doc.getElementById('meet-topic-custom-wrap').hidden, false)
+})
+
+test('readTopic: required, custom validated, values passed through', () => {
+  const doc = new JSDOM(PAGE).window.document
+  renderTopics(doc, { topics: ['Audit review'], allowOther: true })
+  assert.deepEqual(readTopic(doc), { ok: false, error: 'Please choose what the call is about.' })
+  doc.getElementById('meet-topic').value = '__other__'
+  doc.getElementById('meet-topic-custom').value = 'evil.com'
+  assert.equal(readTopic(doc).ok, false)
+  doc.getElementById('meet-topic-custom').value = 'Partnership idea'
+  assert.deepEqual(readTopic(doc), { ok: true, topic_choice: '__other__', topic_custom: 'Partnership idea' })
+  doc.getElementById('meet-topic').value = 'Audit review'
+  assert.deepEqual(readTopic(doc), { ok: true, topic_choice: 'Audit review', topic_custom: '' })
+})
+
+test('readTopic: no topics configured is ok with empty values', () => {
+  const doc = new JSDOM(PAGE).window.document
+  renderTopics(doc, { topics: [], allowOther: false })
+  assert.deepEqual(readTopic(doc), { ok: true, topic_choice: '', topic_custom: '' })
 })

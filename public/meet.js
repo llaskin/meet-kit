@@ -5,6 +5,8 @@
 // handlers precisely because they return a deliberately sanitised shape -- no
 // calendar names, no account emails, no upstream error text.
 
+import { validateCustomTopic, OTHER_CHOICE } from './topics.js'
+
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 /** Validate the form. Returns { ok, error, values } and never throws. */
@@ -55,6 +57,42 @@ export function buildCard(doc, values) {
   return card
 }
 
+export function renderTopics(doc, { topics = [], allowOther = false } = {}) {
+  const wrap = doc.getElementById('meet-topic-wrap')
+  const sel = doc.getElementById('meet-topic')
+  const customWrap = doc.getElementById('meet-topic-custom-wrap')
+  if (!wrap || !sel) return
+  sel.replaceChildren()
+  const add = (value, text) => { const o = doc.createElement('option'); o.value = value; o.textContent = text; sel.appendChild(o) }
+  add('', 'Choose a topic…')
+  for (const t of topics) add(t, t)
+  if (allowOther) add(OTHER_CHOICE, 'Other')
+  wrap.hidden = topics.length === 0 && !allowOther
+  const sync = () => { customWrap.hidden = sel.value !== OTHER_CHOICE }
+  sel.addEventListener('change', sync)
+  sync()
+}
+
+export function readTopic(doc) {
+  const wrap = doc.getElementById('meet-topic-wrap')
+  if (!wrap || wrap.hidden) return { ok: true, topic_choice: '', topic_custom: '' }
+  const choice = doc.getElementById('meet-topic').value
+  if (!choice) return { ok: false, error: 'Please choose what the call is about.' }
+  if (choice !== OTHER_CHOICE) return { ok: true, topic_choice: choice, topic_custom: '' }
+  const c = validateCustomTopic(doc.getElementById('meet-topic-custom').value)
+  if (!c.ok) return { ok: false, error: c.error }
+  return { ok: true, topic_choice: choice, topic_custom: c.value }
+}
+
+export async function loadTopics(doc) {
+  try {
+    const data = await (await doc.defaultView.fetch('/api/public/topics')).json()
+    renderTopics(doc, data)
+  } catch {
+    renderTopics(doc, { topics: [], allowOther: false })
+  }
+}
+
 export function initMeet(doc) {
   const form = doc.getElementById('meet-form')
   if (!form) return false
@@ -71,6 +109,9 @@ export function initMeet(doc) {
     }
     errBox.hidden = true
 
+    const topic = readTopic(doc)
+    if (!topic.ok) { errBox.hidden = false; errBox.textContent = topic.error; return }
+
     win.MEETKIT_PICKER.openModal(buildCard(doc, res.values), {
       slotsUrl: '/api/public/slots',
       bookUrl: '/api/public/book',
@@ -85,6 +126,8 @@ export function initMeet(doc) {
       extraBody: () => ({
         company: res.values.company,
         website: res.values.website,
+        topic_choice: topic.topic_choice,
+        topic_custom: topic.topic_custom,
         turnstileToken: win.turnstile?.getResponse?.(win.__meetTurnstileId) || '',
       }),
       onBooked: (booking) => showConfirmation(doc, booking),
@@ -144,9 +187,10 @@ export async function loadSite(doc) {
 
 if (typeof document !== 'undefined') {
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => { initMeet(document); loadSite(document) }, { once: true })
+    document.addEventListener('DOMContentLoaded', () => { initMeet(document); loadSite(document); loadTopics(document) }, { once: true })
   } else {
     initMeet(document)
     loadSite(document)
+    loadTopics(document)
   }
 }

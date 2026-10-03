@@ -54,6 +54,15 @@ h1{font-size:24px;margin:0 0 6px;letter-spacing:-.01em;}
   </header>
 
   <form id="meet-form" novalidate>
+    <div id="meet-topic-wrap" hidden>
+      <label for="meet-topic">What's the call about?</label>
+      <select id="meet-topic"></select>
+      <div id="meet-topic-custom-wrap" hidden>
+        <label for="meet-topic-custom">Describe the topic in a few words</label>
+        <input type="text" id="meet-topic-custom" maxlength="40" autocomplete="off">
+      </div>
+    </div>
+
     <label for="meet-duration">How long do you need?</label>
     <select id="meet-duration">
       <option value="30" selected>30 minutes</option>
