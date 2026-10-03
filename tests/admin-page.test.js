@@ -438,6 +438,30 @@ test('actually changing the booking calendar DOES send the new writeCalendarId',
   assert.equal(puts[0].writeCalendarId, 'cal2', 'the new selection must be sent when it differs from what was loaded')
 })
 
+test('meeting topics and the Other checkbox render literally and round-trip on Save', async () => {
+  const EVIL_TOPIC = '<img src=x onerror=alert(1)>'
+  const window = await bootWith({ meetingTopics: ['Audit review', EVIL_TOPIC], allowOtherTopic: true })
+  const doc = window.document
+
+  const textarea = doc.getElementById('topics')
+  assert.equal(textarea.value, `Audit review\n${EVIL_TOPIC}`)
+  assert.equal(doc.getElementById('allow-other').checked, true)
+  assert.equal(doc.querySelectorAll('img').length, 0, 'the evil topic must never become a live <img>')
+})
+
+test('Save sends the trimmed, non-empty topic lines and the Other checkbox state', async () => {
+  const { window, puts } = await bootForSave()
+  const doc = window.document
+  doc.getElementById('topics').value = '  Audit review  \n\nPricing\n'
+  doc.getElementById('allow-other').checked = true
+  doc.getElementById('save').dispatchEvent(new window.Event('click', { bubbles: true }))
+  await settle()
+
+  assert.equal(puts.length, 1)
+  assert.deepEqual(puts[0].meetingTopics, ['Audit review', 'Pricing'])
+  assert.equal(puts[0].allowOtherTopic, true)
+})
+
 test('saving a Zoho account email re-enables the Zoho link on the SAME anchor, without reload', async () => {
   // load() reruns after Save. A one-way replaceWith(span) would destroy the
   // anchor on the first disabled render and leave it unable to come back.

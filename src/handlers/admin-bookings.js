@@ -14,6 +14,7 @@ export async function onRequestGet({ env }) {
       notes: r.notes || '',
       meetUrl: r.meet_url || '',
       meetUrlSource: r.meet_url_source || '',
+      topic: r.topic || '',
     })),
   })
 }

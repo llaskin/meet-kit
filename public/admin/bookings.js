@@ -68,6 +68,13 @@ function renderRow(doc, b, reload, fail) {
   row.appendChild(when)
   row.appendChild(line)
 
+  if (b.topic) {
+    const topic = doc.createElement('div')
+    topic.className = 'bk-topic'
+    topic.textContent = `Topic: ${b.topic}`
+    row.appendChild(topic)
+  }
+
   const cancel = doc.createElement('button')
   cancel.type = 'button'
   cancel.className = 'bk-cancel'

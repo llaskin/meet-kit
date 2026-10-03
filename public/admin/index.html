@@ -61,6 +61,14 @@ nav a{margin-right:12px}
   </section>
 
   <section>
+    <h2>Meeting topics</h2>
+    <p class="muted">Shown on /meet as “What's the call about?”. One per line, up to 12, each up to 40 characters. Leave empty to hide the question.</p>
+    <label for="topics">Topics</label>
+    <textarea id="topics" rows="5" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid #ccc;border-radius:7px;font:inherit"></textarea>
+    <label class="cal"><input type="checkbox" id="allow-other"> Offer “Other” with a short custom topic</label>
+  </section>
+
+  <section>
     <h2>Availability rules</h2>
     <label for="tz">Time zone</label><input id="tz" placeholder="America/New_York">
     <label for="days">Weekdays (0=Sun … 6=Sat, comma separated)</label><input id="days">

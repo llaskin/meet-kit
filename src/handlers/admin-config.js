@@ -2,6 +2,7 @@ import * as store from '../core/calendar-store.js'
 import * as google from '../core/google-calendar.js'
 import { accessTokenFor } from '../core/booking-core.js'
 import { loadCfg } from './context.js'
+import { validateTopicList, topicsFromConfig } from '../../public/topics.js'
 
 const json = (status, body) => Response.json(body, { status })
 const HTTPS = /^https:\/\/[^\s]+$/
@@ -30,6 +31,7 @@ export async function onRequestGet({ env }) {
     meetLink: cfg.meet_link || '',
     internalAttendeeEmail: cfg.internal_attendee_email || '',
     rules,
+    ...(({ topics, allowOther }) => ({ meetingTopics: topics, allowOtherTopic: allowOther }))(topicsFromConfig(cfg)),
   })
 }
 
@@ -114,6 +116,16 @@ async function plan(db, env, body) {
       if (!(n >= min && n <= max)) return bad(`rules.${field} must be a whole number from ${min} to ${max}`)
       writes.push([key, String(n)])
     }
+  }
+
+  if (body?.meetingTopics !== undefined) {
+    const v = validateTopicList(body.meetingTopics)
+    if (!v.ok) return bad(`meetingTopics: ${v.error}`)
+    writes.push(['meeting_topics', JSON.stringify(v.topics)])
+  }
+  if (body?.allowOtherTopic !== undefined) {
+    if (typeof body.allowOtherTopic !== 'boolean') return bad('allowOtherTopic must be true or false')
+    writes.push(['allow_other_topic', body.allowOtherTopic ? '1' : '0'])
   }
 
   // Last, because it is the only check that leaves the Worker.

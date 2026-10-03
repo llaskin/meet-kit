@@ -57,6 +57,46 @@ test('cancelling a booking POSTs Content-Type: application/json and a bare {id}'
   assert.deepEqual(JSON.parse(cancelCall.body), { id: 'b1' })
 })
 
+test('a booking topic is shown literally, never parsed as markup', async () => {
+  const dom = new JSDOM(PAGE, { url: 'https://x.test/admin/bookings.html', pretendToBeVisual: true })
+  const { window } = dom
+  window.fetch = async (input) => {
+    const u = String(input)
+    if (u.includes('/api/admin/bookings')) {
+      return new Response(JSON.stringify({ bookings: [{ ...BOOKING, topic: '<b>x</b>' }] }))
+    }
+    return new Response('{}')
+  }
+  globalThis.window = window
+  globalThis.document = window.document
+  globalThis.fetch = window.fetch
+  await import(`../public/admin/bookings.js?t=${Date.now()}${Math.random()}`)
+  await settle()
+
+  const doc = window.document
+  const topic = doc.querySelector('.bk-topic')
+  assert.ok(topic, 'expected a topic element')
+  assert.equal(topic.textContent, 'Topic: <b>x</b>')
+  assert.equal(doc.querySelector('b'), null, 'the topic markup must never become a live <b> element')
+})
+
+test('a booking with no topic renders no topic element', async () => {
+  const dom = new JSDOM(PAGE, { url: 'https://x.test/admin/bookings.html', pretendToBeVisual: true })
+  const { window } = dom
+  window.fetch = async (input) => {
+    const u = String(input)
+    if (u.includes('/api/admin/bookings')) return new Response(JSON.stringify({ bookings: [BOOKING] }))
+    return new Response('{}')
+  }
+  globalThis.window = window
+  globalThis.document = window.document
+  globalThis.fetch = window.fetch
+  await import(`../public/admin/bookings.js?t=${Date.now()}${Math.random()}`)
+  await settle()
+
+  assert.equal(window.document.querySelector('.bk-topic'), null)
+})
+
 test('a fixed-link booking is labelled accordingly', async () => {
   const dom = new JSDOM(PAGE, { url: 'https://x.test/admin/bookings.html', pretendToBeVisual: true })
   const { window } = dom
