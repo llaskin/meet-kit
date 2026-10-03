@@ -167,6 +167,8 @@ async function load() {
   $('zoho-email').value = cfg.zohoAccountEmail
   $('meet-link').value = cfg.meetLink
   $('internal-email').value = cfg.internalAttendeeEmail
+  $('topics').value = (cfg.meetingTopics || []).join('\n')
+  $('allow-other').checked = Boolean(cfg.allowOtherTopic)
   $('tz').value = cfg.rules.timezone
   $('days').value = cfg.rules.weekdays.join(',')
   $('start').value = cfg.rules.startTime
@@ -194,6 +196,8 @@ $('save').addEventListener('click', async () => {
         meetLink: $('meet-link').value,
         internalAttendeeEmail: $('internal-email').value,
         zohoAccountEmail: $('zoho-email').value,
+        meetingTopics: $('topics').value.split('\n').map((s) => s.trim()).filter(Boolean),
+        allowOtherTopic: $('allow-other').checked,
         rules: {
           timezone: $('tz').value,
           // Drop empty tokens BEFORE Number(): split(',') on '' or a

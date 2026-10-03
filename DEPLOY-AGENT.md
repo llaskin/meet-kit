@@ -318,12 +318,19 @@ plain-http host such as a local `wrangler dev`.
    `America/New_York`, Mon–Fri (`1,2,3,4,5`), `09:00`–`17:00`. Leaving them means
    offering Eastern business hours. Adjust minimum notice and booking horizon if
    wanted.
-6. Click **Save settings**. Expected: "Saved."
-7. Optional: **Add a Google account (busy only)** for each other calendar whose
+6. Optional: **Meeting topics.** One topic per line (up to 12, each up to 40
+   characters), and tick **Offer "Other" with a short custom topic** if you
+   want visitors to describe their own. Leave the list empty and unticked to
+   hide the question on `/meet`. The chosen topic is added to the event title,
+   e.g. `Intro call: Audit review`; custom ones read `Other – <their words>` and
+   may not contain links, email addresses, domains or phone numbers.
+7. Click **Save settings**. Expected: "Saved." An invalid value (for example a
+   topic named "Other", or more than 12) shows the problem and saves nothing.
+8. Optional: **Add a Google account (busy only)** for each other calendar whose
    events should block time. Every discovered calendar starts TICKED (counted
    as busy) by default -- untick any calendar that shouldn't block time, such
    as a holiday or birthday calendar, which would otherwise block whole days.
-8. Optional Zoho: enter the **Zoho account email**, click **Save settings**, then
+9. Optional Zoho: enter the **Zoho account email**, click **Save settings**, then
    **Connect Zoho**.
 
 Each account has a **Disconnect** button (click it twice to confirm).
@@ -357,6 +364,26 @@ The agent reports each result as pass or fail.
 | Google `redirect_uri_mismatch` | The redirect URI in Google Cloud must be exactly `<url>/admin/oauth/google/callback` for the host you opened `/admin/` on. |
 | Admin save returns 403 or 415 | Admin writes must be same-origin JSON. Use the admin page itself, not a script or another site. |
 | "Unknown Zoho region" | The Zoho account is in a data centre not on the list in step 5. |
+
+## Updating an existing deployment
+
+Pull the changes, test, apply any NEW migration files in order, then deploy:
+
+```bash
+git pull upstream main
+npm install && npm test
+# one line per NEW migration since your last update, oldest first, e.g. for 001:
+npx wrangler d1 execute meet-kit --remote --file=migrations/001_booking_topic.sql
+npx wrangler deploy
+```
+
+Run each `migrations/NNN_*.sql` file exactly once, oldest first, and only the
+ones added since your last update (the file header says what it changes).
+Fresh installs don't need them: `schema.sql` already includes every column.
+Deploying new code before its migration breaks booking: every attempt creates
+the calendar event, fails to save it, deletes it again and shows the visitor an
+error. Migrate first. Re-running a migration that was already applied fails with
+"duplicate column" and changes nothing.
 
 ## Known unverified (first deployer, please check and report)
 

@@ -6,8 +6,10 @@ import { zonedWallTimeToUtc } from '../src/core/tz.js'
 
 // A hardcoded calendar date ROTS -- see tests/calendar-slots-api.test.js for
 // the full story. Derive a weekday far enough ahead that neither minNotice
-// nor the past-slot filter can ever apply.
-function futureWeekday(daysAhead = 28) {
+// nor the past-slot filter can ever apply -- but stay well inside the 30-day
+// horizon in CONFIG: at 28 days a weekend roll-forward pushed DAY to day 31
+// (seen Fri 2026-10-02 evening ET) and the sanity test found no slots.
+function futureWeekday(daysAhead = 7) {
   const d = new Date(Date.now() + daysAhead * 86_400_000)
   while (d.getUTCDay() === 0 || d.getUTCDay() === 6) d.setUTCDate(d.getUTCDate() + 1)
   return { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1, day: d.getUTCDate() }

@@ -16,7 +16,7 @@ async function seed() {
     expiresAt: new Date(Date.now() + 3600_000).toISOString(), accountEmail: OWNER })
   const id = await savePublicBooking(db, { email: 'v@example.org', capIdentity: 'v@example.org', durationMinutes: 30,
     startUtc: '2099-01-01T15:00:00.000Z', endUtc: '2099-01-01T15:30:00.000Z', eventId: 'e1',
-    meetUrl: 'https://meet.google.com/u', meetUrlSource: 'unique', calendarId: OWNER })
+    meetUrl: 'https://meet.google.com/u', meetUrlSource: 'unique', calendarId: OWNER, topic: 'Audit review' })
   return { db, id }
 }
 
@@ -25,6 +25,7 @@ test('lists upcoming bookings with link source', async () => {
   const { bookings } = await (await onRequestGet({ env: ENV(db) })).json()
   assert.equal(bookings.length, 1)
   assert.equal(bookings[0].meetUrlSource, 'unique')
+  assert.equal(bookings[0].topic, 'Audit review')
 })
 
 test('cancel deletes the event on the pinned calendar, then moves the row', async () => {

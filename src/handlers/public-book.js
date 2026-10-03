@@ -3,6 +3,7 @@ import { PUBLIC_DURATIONS, coerceDuration, isAllowedSpan } from '../core/duratio
 import { accessTokenFor } from '../core/booking-core.js'
 import { verifyTurnstile } from '../core/turnstile.js'
 import { savePublicBooking, countRecentByEmail, countRecentByIp, countRecentTotal } from '../core/public-bookings.js'
+import { validateCustomTopic, resolveTopic, eventTitle, topicsFromConfig, OTHER_CHOICE } from '../../public/topics.js'
 import { gatherBusy } from '../core/busy.js'
 import { computeSlots } from '../core/slots.js'
 import { utcToZonedParts } from '../core/tz.js'
@@ -55,15 +56,22 @@ const CAP_HOURS = 24
  *   1. honeypot   -- costs a bot nothing of ours: no Turnstile round-trip, no
  *                    DB read.
  *   2. fields     -- a Turnstile token is single-use and expires in 300s; a
- *                    typo in the form must not spend one.
+ *                    typo in the form must not spend one. A malformed custom
+ *                    "Other" topic is checked here too, same reason: it is a
+ *                    visitor typo, not abuse, so fixing it must not cost a
+ *                    new token.
  *   3. Turnstile  -- only real, human-passed requests reach the DB at all.
  *   4. rate caps  -- per-email and per-IP, keyed off public_bookings, the
  *                    only storage this endpoint is allowed to touch besides
  *                    the calendar itself.
- *   5. freeness   -- gatherBusy (busy.js) + computeSlots (slots.js), the
+ *   5. topic      -- resolve the choice against the CURRENT owner config
+ *                    (public/topics.js's resolveTopic); a topic removed since
+ *                    the page loaded refuses with "stale", before any
+ *                    calendar read happens on its behalf.
+ *   6. freeness   -- gatherBusy (busy.js) + computeSlots (slots.js), the
  *                    same fail-closed conflict logic /api/public/slots uses.
- *   6. create     -- the calendar event.
- *   7. record     -- ONE row in public_bookings, and nothing else -- this
+ *   7. create     -- the calendar event.
+ *   8. record     -- ONE row in public_bookings, and nothing else -- this
  *                    path must never write to any other table in schema.sql.
  */
 export async function onRequestPost({ request, env, site }) {
@@ -88,6 +96,13 @@ export async function onRequestPost({ request, env, site }) {
   const duration = coerceDuration(b.duration_minutes, PUBLIC_DURATIONS)
   if (!isAllowedSpan(b.start, b.end, [duration])) {
     return json(400, { error: GENERIC })
+  }
+
+  // A malformed custom topic is a visitor typo, not abuse: say so, and check
+  // it BEFORE Turnstile so fixing it does not need a new token.
+  if (b?.topic_choice === OTHER_CHOICE) {
+    const c = validateCustomTopic(b.topic_custom)
+    if (!c.ok) return json(400, { error: c.error })
   }
 
   const remoteIp = request.headers.get('CF-Connecting-IP') || ''
@@ -120,6 +135,16 @@ export async function onRequestPost({ request, env, site }) {
   const uniqueMeet = cfg.write_calendar_meet === '1'
   // No booking account, or no possible video link, is an ops misconfiguration.
   if (!conn || (!uniqueMeet && !fixedLink)) return json(400, { error: GENERIC })
+
+  // Resolve against the CURRENT topic config -- a page loaded before the
+  // owner removed a topic, or toggled "Offer Other" off, must refuse rather
+  // than silently book under a choice that no longer exists.
+  const resolved = resolveTopic({ ...topicsFromConfig(cfg), choice: b.topic_choice, custom: b.topic_custom })
+  if (!resolved.ok) {
+    if (resolved.code === 'stale') return json(400, { error: 'That topic is no longer offered. Please reload the page.' })
+    if (resolved.code === 'required') return json(400, { error: "Please choose what the call is about. If you don't see that question, reload the page." })
+    return json(400, { error: resolved.error })
+  }
 
   // --- The window must be one we actually OFFER ----------------------------
   //
@@ -156,9 +181,12 @@ export async function onRequestPost({ request, env, site }) {
   // anonymous phishing relay: a 50KB body and a chosen subject, delivered as a
   // real invite from a real business.
   //
-  // The summary is therefore FIXED for public bookings -- no caller text in the
-  // subject line at all -- and the notes are stored in D1 for the operator to
-  // read rather than echoed into the invite body.
+  // The summary is therefore FIXED for public bookings -- the ONLY caller text
+  // ever appended to the subject line is the topic, and only after it passed
+  // resolveTopic above (a listed topic verbatim, or "Other – " plus text that
+  // already passed validateCustomTopic's link/contact-detail filter). No other
+  // visitor field reaches the subject; the notes are stored in D1 for the
+  // operator to read rather than echoed into the invite body.
   const clamp = (v, n) => (typeof v === 'string' ? v.trim().slice(0, n) : '')
   const attendeeName = clamp(b.attendee_name, 80)
   const company = clamp(b.company, 80)
@@ -175,8 +203,9 @@ export async function onRequestPost({ request, env, site }) {
       uniqueMeet,
       fixedLink,
       event: {
-        // Fixed title from meet.config.json: no visitor text in the subject.
-        summary: site?.eventTitle || 'Intro call',
+        // Fixed title from meet.config.json, plus the resolved topic (if
+        // any) -- see the "attacker-controlled text" note above.
+        summary: eventTitle(site?.eventTitle || 'Intro call', resolved.topic),
         startIso: b.start,
         endIso: b.end,
         timeZone: rules.timezone,
@@ -205,6 +234,7 @@ export async function onRequestPost({ request, env, site }) {
       durationMinutes: duration,
       startUtc: b.start,
       endUtc: b.end,
+      topic: resolved.topic,
       eventId: created.eventId,
       meetUrl: created.meetUrl,
       meetUrlSource: created.source,

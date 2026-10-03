@@ -1,7 +1,7 @@
 -- meet-kit D1 schema. Apply once:
 --   npx wrangler d1 execute meet-kit --remote --file=schema.sql
--- Later schema changes will ship as numbered files in migrations/, with the
--- apply command in each file's header.
+-- It already includes every migration in migrations/; existing deployments
+-- apply new migrations/NNN_*.sql files instead (see DEPLOY-AGENT.md).
 
 -- Key/value settings: rules_*, write_calendar_id, write_calendar_meet,
 -- meet_link, internal_attendee_email, zoho_account_email, state_signing_key.
@@ -61,6 +61,7 @@ CREATE TABLE IF NOT EXISTS public_bookings (
   client_ip       TEXT,
   calendar_id     TEXT,
   meet_url_source TEXT CHECK (meet_url_source IN ('unique', 'fixed')),
+  topic           TEXT,
   UNIQUE (start_utc)
 );
 CREATE INDEX IF NOT EXISTS idx_public_bookings_cap ON public_bookings (cap_identity, created_at);
@@ -82,6 +83,7 @@ CREATE TABLE IF NOT EXISTS public_bookings_cancelled (
   client_ip       TEXT,
   calendar_id     TEXT,
   meet_url_source TEXT,
+  topic           TEXT,
   cancelled_at    TEXT NOT NULL,
   cancelled_by    TEXT
 );

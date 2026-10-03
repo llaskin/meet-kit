@@ -203,3 +203,25 @@ test('GET reports writeAccount null until a write connection exists', async () =
   await withWrite(db)
   assert.equal((await (await onRequestGet({ env: ENV(db) })).json()).writeAccount, OWNER)
 })
+
+test('topics: saved, returned by GET, and Other flag round-trips', async () => {
+  const db = realDB()
+  assert.equal((await put(db, { meetingTopics: [' Audit review ', 'Pricing'], allowOtherTopic: true })).status, 200)
+  const body = await (await onRequestGet({ env: ENV(db) })).json()
+  assert.deepEqual(body.meetingTopics, ['Audit review', 'Pricing'])
+  assert.equal(body.allowOtherTopic, true)
+})
+
+test('topics: an invalid list is refused and NOTHING is written', async () => {
+  const db = realDB()
+  const res = await put(db, { meetLink: 'https://zoom.example/j/1', meetingTopics: ['Other'] })
+  assert.equal(res.status, 400)
+  assert.match((await res.json()).error, /reserved/)
+  const cfg = await store.getConfig(db)
+  assert.equal(cfg.meet_link, undefined)
+  assert.equal(cfg.meeting_topics, undefined)
+})
+
+test('topics: allowOtherTopic must be boolean', async () => {
+  assert.equal((await put(realDB(), { allowOtherTopic: 'yes' })).status, 400)
+})

@@ -8,6 +8,9 @@ your Google calendar and in their inbox. Busy time is read from any number of
 Google calendars, and optionally from a Zoho calendar, so nobody can book over
 something you already have.
 
+You can also offer a short list of meeting topics ("What's the call about?");
+the chosen topic goes into the event title.
+
 You manage it from `/admin/`, which is locked behind Cloudflare Access so only
 your email can sign in. From there you connect calendars, set your working
 hours and time zone, and see or cancel bookings.
@@ -67,13 +70,16 @@ pull in fixes:
 ```bash
 git remote add upstream <URL of the meet-kit repo you were invited to>   # once
 git pull upstream main
-npm install && npm test && npx wrangler deploy
+npm install && npm test
+# then apply any NEW migrations/NNN_*.sql files, oldest first -- BEFORE deploying:
+#   npx wrangler d1 execute meet-kit --remote --file=migrations/NNN_name.sql
+npx wrangler deploy
 ```
 
-There is no `migrations/` directory yet -- `schema.sql` is the whole schema,
-applied once. Later schema changes will ship as numbered files in
-`migrations/` (`migrations/NNN_*.sql`), each with its apply command in the
-file header; run any new ones before you deploy.
+Schema changes ship as numbered files in `migrations/` (`migrations/NNN_*.sql`),
+each with its apply command in the file header. Run any new ones, oldest first,
+before you deploy -- see "Updating an existing deployment" in `DEPLOY-AGENT.md`.
+Fresh installs only need `schema.sql`.
 
 ## Support
 

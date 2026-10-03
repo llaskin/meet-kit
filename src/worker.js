@@ -12,6 +12,7 @@ import { sweep } from './core/rate-limit.js'
 import * as publicSlots from './handlers/public-slots.js'
 import { MISS_WINDOW_SECONDS } from './handlers/public-slots.js'
 import * as publicBook from './handlers/public-book.js'
+import * as publicTopics from './handlers/public-topics.js'
 import * as publicSite from './handlers/public-site.js'
 import * as adminConfig from './handlers/admin-config.js'
 import * as adminCalendars from './handlers/admin-calendars.js'
@@ -168,6 +169,7 @@ app.use('/api/public/*', async (c, next) => {
 
 app.get('/api/public/site', run(publicSite.onRequestGet))
 app.get('/api/public/slots', run(publicSlots.onRequestGet))
+app.get('/api/public/topics', run(publicTopics.onRequestGet))
 app.post('/api/public/book', run(publicBook.onRequestPost))
 
 app.get('/api/admin/config', run(adminConfig.onRequestGet))
