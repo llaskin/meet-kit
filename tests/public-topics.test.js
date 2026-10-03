@@ -103,7 +103,7 @@ test('a removed topic gets the reload message; missing choice is required', asyn
   assert.equal((await stale.json()).error, 'That topic is no longer offered. Please reload the page.')
   const missing = await post(db, {})
   assert.equal(missing.status, 400)
-  assert.equal((await missing.json()).error, 'Please choose what the call is about.')
+  assert.equal((await missing.json()).error, "Please choose what the call is about. If you don't see that question, reload the page.")
 })
 
 test('Other when disabled is refused as stale', async () => {

@@ -142,7 +142,7 @@ export async function onRequestPost({ request, env, site }) {
   const resolved = resolveTopic({ ...topicsFromConfig(cfg), choice: b.topic_choice, custom: b.topic_custom })
   if (!resolved.ok) {
     if (resolved.code === 'stale') return json(400, { error: 'That topic is no longer offered. Please reload the page.' })
-    if (resolved.code === 'required') return json(400, { error: 'Please choose what the call is about.' })
+    if (resolved.code === 'required') return json(400, { error: "Please choose what the call is about. If you don't see that question, reload the page." })
     return json(400, { error: resolved.error })
   }
 
