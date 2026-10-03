@@ -61,6 +61,7 @@ CREATE TABLE IF NOT EXISTS public_bookings (
   client_ip       TEXT,
   calendar_id     TEXT,
   meet_url_source TEXT CHECK (meet_url_source IN ('unique', 'fixed')),
+  topic           TEXT,
   UNIQUE (start_utc)
 );
 CREATE INDEX IF NOT EXISTS idx_public_bookings_cap ON public_bookings (cap_identity, created_at);
@@ -82,6 +83,7 @@ CREATE TABLE IF NOT EXISTS public_bookings_cancelled (
   client_ip       TEXT,
   calendar_id     TEXT,
   meet_url_source TEXT,
+  topic           TEXT,
   cancelled_at    TEXT NOT NULL,
   cancelled_by    TEXT
 );
