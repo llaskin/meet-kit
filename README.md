@@ -70,7 +70,10 @@ pull in fixes:
 ```bash
 git remote add upstream <URL of the meet-kit repo you were invited to>   # once
 git pull upstream main
-npm install && npm test && npx wrangler deploy
+npm install && npm test
+# then apply any NEW migrations/NNN_*.sql files, oldest first -- BEFORE deploying:
+#   npx wrangler d1 execute meet-kit --remote --file=migrations/NNN_name.sql
+npx wrangler deploy
 ```
 
 Schema changes ship as numbered files in `migrations/` (`migrations/NNN_*.sql`),

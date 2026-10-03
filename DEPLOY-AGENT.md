@@ -372,6 +372,7 @@ Pull the changes, test, apply any NEW migration files in order, then deploy:
 ```bash
 git pull upstream main
 npm install && npm test
+# one line per NEW migration since your last update, oldest first, e.g. for 001:
 npx wrangler d1 execute meet-kit --remote --file=migrations/001_booking_topic.sql
 npx wrangler deploy
 ```
@@ -379,7 +380,10 @@ npx wrangler deploy
 Run each `migrations/NNN_*.sql` file exactly once, oldest first, and only the
 ones added since your last update (the file header says what it changes).
 Fresh installs don't need them: `schema.sql` already includes every column.
-Deploying new code before its migration breaks booking, so migrate first.
+Deploying new code before its migration breaks booking: every attempt creates
+the calendar event, fails to save it, deletes it again and shows the visitor an
+error. Migrate first. Re-running a migration that was already applied fails with
+"duplicate column" and changes nothing.
 
 ## Known unverified (first deployer, please check and report)
 
