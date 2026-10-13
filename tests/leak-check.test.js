@@ -6,7 +6,9 @@ import { join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url))
-const SKIP_DIRS = new Set(['node_modules', '.git', '.wrangler'])
+// graphify-out is a local code-graph cache (never shipped, gitignored) that
+// records absolute paths of whoever generated it.
+const SKIP_DIRS = new Set(['node_modules', '.git', '.wrangler', 'graphify-out'])
 const SELF = 'tests/leak-check.test.js'
 
 // Patterns split so this file does not match itself if SELF is ever removed.
@@ -38,11 +40,22 @@ function* files(dir) {
   }
 }
 
+// Gitignored, per-deployment files: never shipped, and they hold whoever is
+// deploying's own email and name.
+const LOCAL_FILES = new Set(['.setup-state.json', '.dev.vars'])
+// Once OWNER_EMAIL is set, this copy is someone's own deployment and these two
+// files carry their details (written by `npm run setup` or by hand), which
+// can legitimately match a pattern -- an employer's domain, a surname. The
+// pristine template (OWNER_EMAIL "") is still checked in full.
+const DEPLOYER_FILES = new Set(['wrangler.jsonc', 'meet.config.json'])
+const configured = /"OWNER_EMAIL"\s*:\s*"[^"]+"/.test(readFileSync(join(ROOT, 'wrangler.jsonc'), 'utf8'))
+
 test('no original-owner identifiers anywhere in the shipped tree', () => {
   const hits = []
   for (const f of files(ROOT)) {
     const rel = relative(ROOT, f)
     if (rel === SELF || rel === 'package-lock.json' || rel === 'LICENSE') continue
+    if (LOCAL_FILES.has(rel) || (configured && DEPLOYER_FILES.has(rel))) continue
     const text = readFileSync(f, 'utf8')
     for (const re of PATTERNS) if (re.test(text)) hits.push(`${rel}: ${re}`)
   }
