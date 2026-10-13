@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="setup-token" content="__SETUP_TOKEN__">
+<title>meet-kit setup</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --ink: #1b1e24; --muted: #5c6370; --line: #e1e4ea;
+    --accent: #0b6cff; --accent-ink: #ffffff; --ok: #137a43; --bad: #b42318; --warn-bg: #fff6e0;
+    --warn-ink: #7a5200; --code: #f0f2f5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #13161b; --panel: #1b1f26; --ink: #e8eaee; --muted: #a1a8b5; --line: #2c313b;
+      --accent: #5b9dff; --accent-ink: #0b0f16; --ok: #4cc483; --bad: #ff7b6e; --warn-bg: #2e2716;
+      --warn-ink: #f0c869; --code: #252a33;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #13161b; --panel: #1b1f26; --ink: #e8eaee; --muted: #a1a8b5; --line: #2c313b;
+    --accent: #5b9dff; --accent-ink: #0b0f16; --ok: #4cc483; --bad: #ff7b6e; --warn-bg: #2e2716;
+    --warn-ink: #f0c869; --code: #252a33;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 28px 16px 80px; }
+  h1 { font-size: 1.55rem; margin: 0 0 4px; }
+  .lede { color: var(--muted); margin: 0 0 18px; }
+  .progress { height: 6px; background: var(--line); border-radius: 99px; overflow: hidden; margin-bottom: 22px; }
+  .progress > div { height: 100%; background: var(--accent); transition: width .3s; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; margin: 12px 0; }
+  .card > header { display: flex; align-items: center; gap: 12px; padding: 14px 16px; cursor: default; }
+  .card.done > header, .card.todo > header { cursor: pointer; }
+  .num { flex: none; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-weight: 600; font-size: .85rem; border: 2px solid var(--line); color: var(--muted); }
+  .card.todo .num { border-color: var(--accent); color: var(--accent); }
+  .card.done .num { background: var(--ok); border-color: var(--ok); color: var(--panel); }
+  .card.blocked { opacity: .55; }
+  .card h2 { font-size: 1.02rem; margin: 0; flex: 1; }
+  .badge { font-size: .78rem; color: var(--muted); }
+  .card.done .badge { color: var(--ok); }
+  .body { padding: 0 16px 16px 56px; }
+  .body p { margin: .5em 0; }
+  ol.steps { padding-left: 1.2em; margin: .5em 0; }
+  ol.steps > li { margin: .45em 0; }
+  label { display: block; font-weight: 600; font-size: .9rem; margin: 12px 0 4px; }
+  .hint { font-weight: 400; color: var(--muted); font-size: .85rem; }
+  input[type=text], input[type=email], input[type=password], input[type=url] {
+    width: 100%; font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink);
+  }
+  input[type=color] { width: 56px; height: 36px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); padding: 2px; }
+  input[aria-invalid=true] { border-color: var(--bad); }
+  .err { color: var(--bad); font-size: .85rem; margin-top: 3px; }
+  .radio { display: flex; gap: 8px; align-items: baseline; font-weight: 400; margin: 6px 0; }
+  button, a.btn {
+    font: inherit; font-weight: 600; border-radius: 8px; padding: 8px 14px; cursor: pointer; text-decoration: none; display: inline-block;
+    border: 1px solid var(--accent); background: var(--accent); color: var(--accent-ink); margin: 12px 8px 0 0;
+  }
+  button.secondary, a.btn.secondary { background: transparent; color: var(--accent); }
+  button:disabled { opacity: .5; cursor: progress; }
+  button.copy { font-size: .78rem; padding: 2px 8px; margin: 0 0 0 6px; vertical-align: middle; }
+  code, .val { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .86em; background: var(--code); padding: 1px 5px; border-radius: 5px; overflow-wrap: anywhere; }
+  .msg { margin-top: 12px; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--line); }
+  .msg.ok { border-color: var(--ok); color: var(--ok); }
+  .msg.bad { border-color: var(--bad); color: var(--bad); }
+  .msg.busy { color: var(--muted); }
+  .warn { background: var(--warn-bg); color: var(--warn-ink); padding: 10px 12px; border-radius: 8px; margin: 10px 0; }
+  details { margin-top: 8px; }
+  pre { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--code); padding: 10px; border-radius: 8px; font-size: .8rem; max-height: 280px; overflow: auto; }
+  .finish { background: var(--panel); border: 2px solid var(--ok); border-radius: 12px; padding: 16px; margin: 18px 0; }
+  .summary { color: var(--muted); font-size: .9rem; }
+  a { color: var(--accent); }
+  @media (max-width: 560px) { .body { padding-left: 16px; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Set up meet-kit</h1>
+  <p class="lede">Ten steps from this folder to a live booking page on your own Cloudflare account. The wizard runs the commands; when a step needs a website, it tells you exactly what to click. You can close this page and run <code>npm run setup</code> again at any time: it picks up where you left off.</p>
+  <div class="progress" aria-hidden="true"><div id="bar" style="width:0"></div></div>
+  <div id="finish"></div>
+  <div id="steps"><p class="summary">Loading…</p></div>
+</main>
+<script nonce="__NONCE__">
+'use strict'
+const TOKEN = document.querySelector('meta[name="setup-token"]').content
+const SCOPES = [
+  'https://www.googleapis.com/auth/calendar.freebusy',
+  'https://www.googleapis.com/auth/calendar.calendarlist.readonly',
+  'https://www.googleapis.com/auth/calendar.events',
+]
+let current = null
+let openStep = null
+let busy = false
+const results = {}
+// What she last submitted per step (secrets excluded), so a failed save does
+// not wipe the form when it re-renders.
+const drafts = {}
+const SECRET_FIELDS = ['clientSecret', 'secretKey']
+const draft = (step, name, fallback) => {
+  const d = drafts[step]
+  return d && d[name] !== undefined ? d[name] : fallback
+}
+
+// ---- tiny DOM helpers (textContent only; nothing is parsed as HTML) ----
+function h(tag, attrs, ...kids) {
+  const n = document.createElement(tag)
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v === undefined || v === null || v === false) continue
+    if (k === 'on') for (const [ev, fn] of Object.entries(v)) n.addEventListener(ev, fn)
+    else if (k === 'class') n.className = v
+    else n.setAttribute(k, v === true ? '' : v)
+  }
+  for (const kid of kids.flat()) if (kid !== null && kid !== undefined && kid !== false) n.append(kid instanceof Node ? kid : String(kid))
+  return n
+}
+const ext = (href, text) => h('a', { href, target: '_blank', rel: 'noopener noreferrer' }, text, ' ↗')
+function val(text) {
+  const btn = h('button', { type: 'button', class: 'copy secondary', on: { click: async () => {
+    try { await navigator.clipboard.writeText(text); btn.textContent = 'Copied' } catch { btn.textContent = 'Select and copy' }
+    setTimeout(() => { btn.textContent = 'Copy' }, 1500)
+  } } }, 'Copy')
+  return h('span', null, h('span', { class: 'val' }, text), btn)
+}
+
+// ---- API ----
+async function api(path, data) {
+  const init = { headers: { 'x-setup-token': TOKEN } }
+  if (data !== undefined) {
+    init.method = 'POST'
+    init.headers['content-type'] = 'application/json'
+    init.body = JSON.stringify(data)
+  }
+  const res = await fetch(path, init)
+  const body = await res.json().catch(() => ({}))
+  return { status: res.status, body }
+}
+
+async function refresh() {
+  try {
+    const r = await api('/api/status')
+    if (r.status !== 200) throw new Error('status')
+    current = r.body
+    render()
+  } catch {
+    document.getElementById('steps').replaceChildren(h('div', { class: 'msg bad' },
+      'Lost contact with the setup program. If you closed the terminal window, run npm run setup again and use the new link.'))
+  }
+}
+
+async function act(step, action, data) {
+  if (busy) return
+  busy = true
+  if (data) {
+    drafts[step] = { ...data }
+    for (const k of SECRET_FIELDS) delete drafts[step][k]
+  }
+  results[step] = { busy: true }
+  render()
+  try {
+    const r = await api(`/api/${action}`, data ?? {})
+    results[step] = r.body.result || { ok: false, message: `Request failed (${r.status}).` }
+    if (r.body.status) current = r.body.status
+  } catch {
+    results[step] = { ok: false, message: 'Lost contact with the setup program. Is the terminal window still open?' }
+  }
+  busy = false
+  const next = current.steps.find((s) => s.state === 'todo')
+  if (results[step].ok && !results[step].chooseAccount && next) openStep = next.id
+  render()
+}
+
+function formData(form) {
+  const out = {}
+  for (const el of form.elements) {
+    if (!el.name) continue
+    if (el.type === 'radio') { if (el.checked) out[el.name] = el.value }
+    else out[el.name] = el.value
+  }
+  return out
+}
+
+// ---- shared bits ----
+function resultBox(step) {
+  const r = results[step]
+  if (!r) return null
+  if (r.busy) return h('div', { class: 'msg busy' }, 'Working… this can take a minute. Keep this page open.')
+  return h('div', { class: `msg ${r.ok ? 'ok' : 'bad'}` },
+    r.message || (r.ok ? 'Done.' : 'Something went wrong.'),
+    r.link ? h('div', null, h('a', { class: 'btn', href: r.link, target: '_blank', rel: 'noopener noreferrer' }, 'Open Cloudflare ↗')) : null,
+    r.output ? h('details', null, h('summary', null, 'Details'), h('pre', null, r.output)) : null)
+}
+function field(name, label, opts = {}) {
+  const errors = (results[opts.step] && results[opts.step].errors) || {}
+  const input = h('input', {
+    type: opts.type || 'text', name,
+    value: opts.type === 'password' ? '' : draft(opts.step, name, opts.value ?? ''), placeholder: opts.placeholder,
+    autocomplete: opts.autocomplete || 'off', spellcheck: 'false', 'aria-invalid': errors[name] ? 'true' : null,
+  })
+  return h('div', null,
+    h('label', null, label, opts.hint ? h('span', { class: 'hint' }, ` (${opts.hint})`) : null),
+    input, errors[name] ? h('div', { class: 'err' }, errors[name]) : null)
+}
+const runButton = (label, onClick) => h('button', { type: 'button', disabled: busy, on: { click: onClick } }, label)
+function form(step, action, children, submitLabel) {
+  const f = h('form', { on: { submit: (e) => { e.preventDefault(); act(step, action, formData(f)) } } },
+    children, h('button', { type: 'submit', disabled: busy }, submitLabel))
+  return f
+}
+
+// ---- step bodies ----
+const BODIES = {
+  login(info) {
+    if (info.accounts && info.accounts.length) {
+      return [
+        h('p', null, `You are logged in as ${info.email}. This login can use more than one Cloudflare account. Pick the one meet-kit should live in:`),
+        form('login', 'chooseAccount', info.accounts.map((a, i) =>
+          h('label', { class: 'radio' }, h('input', { type: 'radio', name: 'accountId', value: a.id, checked: i === 0 }), `${a.name} `, h('span', { class: 'hint' }, a.id))),
+        'Use this account'),
+      ]
+    }
+    return [
+      h('p', null, 'No Cloudflare account yet? ', ext('https://dash.cloudflare.com/sign-up', 'Sign up free'), ', click the link in the verification email, then come back.'),
+      h('p', null, 'Press the button. A Cloudflare page opens in your browser: click ', h('b', null, 'Allow'), ', then return to this tab.'),
+      runButton(info.accountId ? 'Log in again' : 'Log in to Cloudflare', () => act('login', 'login')),
+    ]
+  },
+
+  profile(info) {
+    const p = info.profile || {}
+    const errs = (results.profile && results.profile.errors) || {}
+    return [
+      h('p', null, 'What visitors see on your booking page, and who may open the admin page. You can change these later by running setup again.'),
+      form('profile', 'saveProfile', [
+        field('ownerEmail', 'Your email', { type: 'email', value: info.ownerEmail || info.email, hint: 'only this address can open the admin page', step: 'profile' }),
+        h('label', null, 'Your calendar is on'),
+        h('label', { class: 'radio' }, h('input', { type: 'radio', name: 'accountType', value: 'gmail', checked: draft('profile', 'accountType', info.accountType) === 'gmail' }), 'a personal Gmail account'),
+        h('label', { class: 'radio' }, h('input', { type: 'radio', name: 'accountType', value: 'workspace', checked: draft('profile', 'accountType', info.accountType) === 'workspace' }), 'a Google Workspace (work or school) account'),
+        errs.accountType ? h('div', { class: 'err' }, errs.accountType) : null,
+        field('displayName', 'Your name', { value: p.displayName === 'Your Name' ? '' : p.displayName, step: 'profile' }),
+        field('pageTitle', 'Page title', { value: p.pageTitle, step: 'profile' }),
+        field('pageSubtitle', 'Page subtitle', { value: p.pageSubtitle, step: 'profile' }),
+        field('eventTitle', 'Calendar event title', { value: p.eventTitle, hint: 'e.g. Intro call', step: 'profile' }),
+        field('privacyUrl', 'Privacy policy link', { type: 'url', value: p.privacyUrl, hint: 'optional, https://…', step: 'profile' }),
+        field('termsUrl', 'Terms link', { type: 'url', value: p.termsUrl, hint: 'optional, https://…', step: 'profile' }),
+        h('label', null, 'Accent colour'),
+        h('input', { type: 'color', name: 'accentColor', value: draft('profile', 'accentColor', p.accentColor || '#0b6cff') }),
+        errs.accentColor ? h('div', { class: 'err' }, errs.accentColor) : null,
+      ], 'Save'),
+    ]
+  },
+
+  database() {
+    return [
+      h('p', null, 'Creates a database called ', h('code', null, 'meet-kit'), ' in your Cloudflare account (or reuses it if it already exists) and sets up its tables.'),
+      runButton('Create the database', () => act('database', 'setupDatabase')),
+    ]
+  },
+
+  deploy() {
+    return [
+      h('p', null, 'Runs the built-in tests (about 10 seconds), then publishes the site to Cloudflare and checks that the booking page loads and the admin page is locked.'),
+      h('p', { class: 'summary' }, 'If Cloudflare asks you to choose a workers.dev subdomain, a button appears here: pick any name (it becomes part of your web address), then press this button again.'),
+      runButton('Test and publish', () => act('deploy', 'firstDeploy')),
+    ]
+  },
+
+  google(info) {
+    const workspace = info.accountType === 'workspace'
+    return [
+      h('p', null, 'This lets meet-kit read your free/busy time and add bookings to your calendar. It happens in Google Cloud, in the browser, signed in as the Google account that owns your calendar.'),
+      workspace ? h('div', { class: 'warn' }, 'Work account: your Google Workspace admin may have to allow you to create a Cloud project or this app. If Google says "admin policy" or "access blocked", ask them first.') : null,
+      h('ol', { class: 'steps' },
+        h('li', null, ext('https://console.cloud.google.com/projectcreate', 'Create a project'), ' named ', h('code', null, 'meet-kit'), '. When it is ready, make sure it is the selected project (top bar).'),
+        h('li', null, ext('https://console.cloud.google.com/apis/library/calendar-json.googleapis.com', 'Open Google Calendar API'), ' and click ', h('b', null, 'Enable'), '.'),
+        h('li', null, ext('https://console.cloud.google.com/auth/overview', 'Open Google Auth Platform'), ' and click ', h('b', null, 'Get started'), '. App name ', h('code', null, 'meet-kit'), ', support email: yours. Audience: ',
+          workspace ? h('b', null, 'Internal') : h('b', null, 'External'), '. Contact email: yours. Agree and create.'),
+        h('li', null, 'Left menu ', h('b', null, 'Data access'), ' → ', h('b', null, 'Add or remove scopes'), '. Paste these three under "Manually add scopes", click ', h('b', null, 'Add to table'), ', ', h('b', null, 'Update'), ', then ', h('b', null, 'Save'), ':',
+          h('div', null, SCOPES.map((s) => h('div', null, val(s))))),
+        workspace ? null : h('li', null, 'Left menu ', h('b', null, 'Audience'), ' → ', h('b', null, 'Publish app'), ' → confirm, so it says ', h('b', null, 'In production'), '. Skip this and the calendar connection silently stops working after 7 days. (You will see an "unverified app" warning once when you connect: that is expected.)'),
+        h('li', null, 'Left menu ', h('b', null, 'Clients'), ' → ', h('b', null, 'Create client'), ' → type ', h('b', null, 'Web application'), '. Under ', h('b', null, 'Authorized redirect URIs'), ' click ', h('b', null, 'Add URI'), ' and paste exactly:',
+          h('div', null, val(info.redirectUri)), 'Click ', h('b', null, 'Create'), '. A box shows the Client ID and Client secret: copy them below.'),
+      ),
+      form('google', 'saveGoogle', [
+        field('clientId', 'Client ID', { value: info.googleClientId, placeholder: '1234…apps.googleusercontent.com', step: 'google' }),
+        field('clientSecret', 'Client secret', { type: 'password', autocomplete: 'new-password', hint: info.googleClientId ? 'leave empty to keep the one already saved' : 'goes straight to Cloudflare, never saved here', step: 'google' }),
+      ], 'Save Google client'),
+    ]
+  },
+
+  turnstile(info) {
+    return [
+      h('p', null, 'Turnstile is Cloudflare\'s free "are you human?" check on the booking form. It stops bots from filling your calendar.'),
+      h('ol', { class: 'steps' },
+        h('li', null, ext(`https://dash.cloudflare.com/${info.accountId}/turnstile`, 'Open Turnstile'), ' and click ', h('b', null, 'Add widget'), '.'),
+        h('li', null, 'Widget name ', h('code', null, 'meet-kit'), '. Under hostnames, add ', val(info.host), '.'),
+        h('li', null, 'Widget mode ', h('b', null, 'Managed'), '. Leave the rest, click ', h('b', null, 'Create'), '.'),
+        h('li', null, 'Copy the ', h('b', null, 'Site Key'), ' and ', h('b', null, 'Secret Key'), ' below.'),
+      ),
+      form('turnstile', 'saveTurnstile', [
+        field('siteKey', 'Site key', { value: info.turnstileSiteKey, placeholder: '0x4AAAA…', step: 'turnstile' }),
+        field('secretKey', 'Secret key', { type: 'password', autocomplete: 'new-password', hint: info.turnstileSiteKey ? 'leave empty to keep the one already saved' : 'checked with Cloudflare, then stored there only', step: 'turnstile' }),
+      ], 'Save Turnstile'),
+    ]
+  },
+
+  access(info) {
+    return [
+      h('p', null, 'Cloudflare Access puts a login in front of your admin page: only your email gets in, with a one-time code sent to it. The booking page stays public.'),
+      h('div', { class: 'warn' }, 'Do not use the "Protect this Worker behind Access" switch on the Worker\'s own settings: it locks the public booking page too. Use the steps below.'),
+      h('ol', { class: 'steps' },
+        h('li', null, ext('https://one.dash.cloudflare.com/', 'Open Cloudflare Zero Trust'), '. The first time, choose a team name and the ', h('b', null, 'Free'), ' plan.'),
+        h('li', null, h('b', null, 'Access'), ' → ', h('b', null, 'Applications'), ' → ', h('b', null, 'Add an application'), ' → ', h('b', null, 'Self-hosted'), '. Name it ', h('code', null, 'meet-kit admin'), '.'),
+        h('li', null, 'Add two public hostnames, both with domain ', val(info.host), ': one with path ', val('admin'), ' and one with path ', val('api/admin'), '.'),
+        h('li', null, 'Add a policy: action ', h('b', null, 'Allow'), ', Include → ', h('b', null, 'Emails'), ' → ', val(info.ownerEmail), '. Save the application.'),
+        h('li', null, 'Optional but recommended: in the application\'s ', h('b', null, 'Advanced settings'), ' → cookie settings, set ', h('b', null, 'SameSite'), ' to ', h('b', null, 'Lax'), ' (not Strict).'),
+        h('li', null, 'Copy two values below: your ', h('b', null, 'team domain'), ' (Zero Trust → Settings, looks like ', h('code', null, 'yourteam.cloudflareaccess.com'), ') and the application\'s ', h('b', null, 'Application Audience (AUD) Tag'), ' (open the application; it is on its overview).'),
+      ),
+      form('access', 'saveAccess', [
+        field('teamDomain', 'Team domain', { value: info.teamDomain, placeholder: 'yourteam.cloudflareaccess.com', step: 'access' }),
+        field('aud', 'Application Audience (AUD) Tag', { value: info.aud, placeholder: '64 letters and numbers', step: 'access' }),
+      ], 'Save Access'),
+    ]
+  },
+
+  lock() {
+    return [
+      h('p', null, 'Publishes your settings, then checks from outside that the admin page sends visitors to your Access login, that no trick address gets around it, and that the booking page is still public.'),
+      runButton('Publish and check', () => act('lock', 'lockCheck')),
+    ]
+  },
+
+  calendar(info) {
+    return [
+      h('p', null, 'The rest happens on your own admin page. Open it, sign in with the code Cloudflare emails you, then:'),
+      h('ol', { class: 'steps' },
+        h('li', null, 'Click ', h('b', null, 'Connect booking account'), ' and approve with the Google account that owns your calendar.'),
+        h('li', null, 'Under ', h('b', null, 'Calendar that receives bookings'), ', pick your calendar.'),
+        h('li', null, 'Read the ', h('b', null, 'Unique Meet links'), ' line. If it says "not available", enter a ', h('b', null, 'Fixed meeting link'), ' (any https:// video link). A booking is never confirmed without one.'),
+        h('li', null, 'Set your ', h('b', null, 'time zone'), ', ', h('b', null, 'weekdays'), ' (0 = Sunday … 6 = Saturday) and ', h('b', null, 'day start and end'), '. Defaults are New York time, Mon–Fri, 09:00–17:00.'),
+        h('li', null, 'Optional: meeting topics, and other Google calendars whose events should block time (untick holiday or birthday calendars).'),
+        h('li', null, 'Click ', h('b', null, 'Save settings'), ' and wait for "Saved."'),
+      ),
+      h('a', { class: 'btn', href: `${info.url}/admin/`, target: '_blank', rel: 'noopener noreferrer' }, 'Open my admin page ↗'),
+      runButton('I\'ve done this', () => act('calendar', 'tick', { step: 'calendar', done: true })),
+    ]
+  },
+
+  e2e(info) {
+    return [
+      h('ol', { class: 'steps' },
+        h('li', null, 'From a ', h('b', null, 'different'), ' email address than yours (a friend, or a second account), book a time on ', ext(`${info.url}/meet`, 'your booking page'), '. An invite with a video link should arrive, and the event should be on your calendar.'),
+        h('li', null, 'Open ', ext(`${info.url}/admin/bookings.html`, 'your bookings'), ' and cancel that test booking. A cancellation email should arrive and the event should disappear.'),
+      ),
+      h('p', { class: 'summary' }, 'Did not work? See the Troubleshooting table at the end of DEPLOY-AGENT.md in this folder.'),
+      runButton('Both worked', () => act('e2e', 'tick', { step: 'e2e', done: true })),
+    ]
+  },
+}
+
+// ---- render ----
+function render() {
+  const { steps, info } = current
+  const done = steps.filter((s) => s.state === 'done').length
+  document.getElementById('bar').style.width = `${(done / steps.length) * 100}%`
+  if (!openStep || !steps.some((s) => s.id === openStep && s.state !== 'blocked')) {
+    openStep = (steps.find((s) => s.state === 'todo') || {}).id || null
+  }
+
+  const finish = document.getElementById('finish')
+  finish.replaceChildren()
+  if (done === steps.length) {
+    finish.append(h('div', { class: 'finish' },
+      h('h2', { style: 'margin:0 0 6px' }, 'You\'re live.'),
+      h('p', null, 'Share this link, or put it behind a "Book a call" button on your site:'),
+      h('p', null, val(`${info.url}/meet`)),
+      h('p', { class: 'summary' }, 'You can close this page and stop the program in the terminal (Ctrl+C).')))
+  }
+
+  const list = steps.map((s, i) => {
+    const expanded = s.state !== 'blocked' && openStep === s.id
+    const badge = s.state === 'done' ? 'Done' : s.state === 'todo' ? 'Next' : ''
+    const card = h('section', { class: `card ${s.state}` },
+      h('header', { on: { click: () => { if (s.state !== 'blocked') { openStep = expanded ? null : s.id; render() } } } },
+        h('span', { class: 'num' }, s.state === 'done' ? '✓' : String(i + 1)),
+        h('h2', null, s.title),
+        h('span', { class: 'badge' }, badge)))
+    if (expanded) card.append(h('div', { class: 'body' }, BODIES[s.id](info), resultBox(s.id)))
+    return card
+  })
+  document.getElementById('steps').replaceChildren(...list)
+}
+
+refresh()
+</script>
+</body>
+</html>
