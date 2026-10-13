@@ -2,8 +2,9 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFileSync } from 'node:fs'
 import { readString, setString, updateMeetConfig, MEET_CONFIG_KEYS } from '../scripts/setup/config-files.mjs'
+import { readPristineWrangler } from './helpers/template.js'
 
-const WRANGLER = readFileSync(new URL('../wrangler.jsonc', import.meta.url), 'utf8')
+const WRANGLER = readPristineWrangler()
 const MEET = readFileSync(new URL('../meet.config.json', import.meta.url), 'utf8')
 
 test('readString reads vars and the database id from the real wrangler.jsonc', () => {

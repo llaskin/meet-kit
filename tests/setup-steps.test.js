@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createSetup } from '../scripts/setup/steps.mjs'
 import { readString, setString } from '../scripts/setup/config-files.mjs'
+import { readPristineWrangler } from './helpers/template.js'
 
 const REPO = new URL('..', import.meta.url).pathname
 const URL_ = 'https://meet-kit.jane.workers.dev'
@@ -16,7 +17,7 @@ const TABLES = JSON.stringify([{ results: ['calendar_config', 'calendar_connecti
 
 function tempRepo() {
   const root = mkdtempSync(join(tmpdir(), 'meetkit-setup-'))
-  copyFileSync(join(REPO, 'wrangler.jsonc'), join(root, 'wrangler.jsonc'))
+  writeFileSync(join(root, 'wrangler.jsonc'), readPristineWrangler())
   copyFileSync(join(REPO, 'meet.config.json'), join(root, 'meet.config.json'))
   return root
 }
