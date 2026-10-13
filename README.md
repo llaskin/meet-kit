@@ -27,7 +27,21 @@ you to run and no third-party booking service in the middle.
 
 ## Set it up
 
-Open this folder in your AI coding agent and say *deploy meet-kit for me*. It
+The easiest way is the setup wizard. In this folder, run:
+
+```bash
+npm install
+npm run setup
+```
+
+A page opens in your browser and walks you through all ten steps. It runs the
+commands for you, and for the parts that happen on a website (Google Cloud,
+Turnstile, Cloudflare Access) it shows exactly what to click, with your own
+addresses filled in, and checks what you paste back. Secrets you paste go
+straight to Cloudflare; they are never saved in this folder. You can stop and
+run `npm run setup` again later: it picks up where you left off.
+
+Or open this folder in your AI coding agent and say *deploy meet-kit for me*. It
 follows `DEPLOY-AGENT.md`, one step at a time, and asks you to do the parts that
 need a browser (Google Cloud, Turnstile, Cloudflare Access).
 

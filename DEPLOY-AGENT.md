@@ -17,6 +17,11 @@ the result it should produce.
   A half-finished setup is safe to leave overnight.
 - Do not deploy with failing tests.
 
+A person deploying without an agent can run `npm run setup` instead: a local
+web page (`scripts/setup/`) that walks through these same steps 1-10 and runs
+the same commands and checks. Custom domains and Zoho are not in the wizard;
+use the steps below for those.
+
 Throughout, `<host>` is the hostname the site is served on (a custom domain, or
 `meet-kit.<subdomain>.workers.dev`) and `<url>` is `https://<host>`.
 

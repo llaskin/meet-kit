@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Setup Wizard Runbook</title>
+<style>
+  :root{
+    --bg:#0f1420; --panel:#161d2e; --panel2:#1c2436; --ink:#e6ebf5; --muted:#9aa7c0;
+    --line:#2a3450; --accent:#4f8cff; --ok:#37c980; --amber:#f0b429; --red:#ff5c72;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.92em}
+  .wrap{max-width:920px;margin:0 auto;padding:0 18px 96px}
+  header{position:sticky;top:0;z-index:10;background:rgba(15,20,32,.94);
+    backdrop-filter:blur(8px);border-bottom:1px solid var(--line);padding:14px 0 12px}
+  header .wrap{padding-bottom:0}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{color:var(--muted);font-size:13px;margin:0}
+  .progwrap{display:flex;align-items:center;gap:12px;margin-top:10px}
+  .bar{flex:1;height:10px;background:var(--panel2);border-radius:6px;overflow:hidden;border:1px solid var(--line)}
+  .bar > i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--ok));transition:width .25s}
+  .pct{font-variant-numeric:tabular-nums;color:var(--muted);min-width:118px;text-align:right;font-size:13px}
+  button.reset{background:var(--panel2);color:var(--muted);border:1px solid var(--line);
+    border-radius:7px;padding:6px 10px;cursor:pointer;font-size:12px}
+  button.reset:hover{color:var(--ink);border-color:var(--accent)}
+  .banner{background:linear-gradient(180deg,#2a1520,#20131c);border:1px solid #5a2233;
+    border-radius:12px;padding:14px 16px;margin:18px 0}
+  .banner h3{margin:0 0 6px;color:var(--red);font-size:14px;letter-spacing:.3px}
+  .banner ul{margin:6px 0 0;padding-left:20px;color:#f4c6ce}
+  .banner li{margin:3px 0}
+  .info{background:linear-gradient(180deg,#0f2436,#0c1b2b);border:1px solid #234a63;
+    border-radius:12px;padding:12px 16px;margin:14px 0;color:#bfe0f2;font-size:13px}
+  .info b{color:#e6f3fb}
+  section.step{background:var(--panel);border:1px solid var(--line);border-radius:14px;
+    margin:20px 0;overflow:hidden}
+  .step > .head{display:flex;align-items:center;gap:12px;padding:14px 16px;
+    background:var(--panel2);border-bottom:1px solid var(--line)}
+  .step .num{width:30px;height:30px;flex:0 0 auto;border-radius:8px;background:var(--accent);
+    color:#04101f;font-weight:700;display:grid;place-items:center;font-size:15px}
+  .step.gate .num{background:var(--red);color:#1a0308}
+  .step h2{font-size:16px;margin:0}
+  .badge{margin-left:auto;font-size:11px;font-weight:600;letter-spacing:.4px;
+    padding:4px 9px;border-radius:20px;white-space:nowrap}
+  /* Badge variants — rename/recolor per domain (env, timing, risk). */
+  .b-safe{background:rgba(127,141,176,.16);color:#aab6d6;border:1px solid #3d486a}
+  .b-warn{background:rgba(240,180,41,.14);color:var(--amber);border:1px solid #6b5417}
+  .b-risk{background:rgba(255,92,114,.14);color:var(--red);border:1px solid #6b2530}
+  .body{padding:8px 16px 14px}
+  .lead{color:var(--muted);font-size:13.5px;margin:8px 0 12px}
+  ul.checks{list-style:none;margin:0;padding:0}
+  ul.checks li{padding:9px 0;border-bottom:1px dashed var(--line)}
+  ul.checks li:last-child{border-bottom:0}
+  label.chk{display:flex;gap:11px;align-items:flex-start;cursor:pointer}
+  label.chk input{margin-top:3px;width:17px;height:17px;flex:0 0 auto;accent-color:var(--ok);cursor:pointer}
+  label.chk.gatechk input{accent-color:var(--red)}
+  label.chk .txt{flex:1}
+  label.chk.done .txt > .t{color:var(--muted);text-decoration:line-through}
+  .t{display:block}
+  .why{display:block;color:var(--muted);font-size:12.5px;margin-top:2px}
+  .why b{color:#c3ccdf;font-weight:600}
+  .sub-checks{list-style:none;margin:8px 0 2px;padding:8px 0 0 30px;border-top:1px dashed var(--line)}
+  .sub-checks li{padding:6px 0;border:0}
+  pre{background:#0b0f1a;border:1px solid var(--line);border-radius:8px;padding:10px 12px;
+    overflow-x:auto;margin:8px 0 2px;color:#cfe0ff;white-space:pre-wrap;word-break:break-word}
+  /* Copy button — the JS wraps every [pre] in .precopy and injects the button.
+     Authors write a plain [pre]; nothing to remember. */
+  .precopy{position:relative}
+  /* Keep wrapped text clear of the button: pre-wrap means long lines would otherwise
+     run underneath it, which is worst on exactly the long commands you most want to copy. */
+  .precopy > pre{padding-right:62px}
+  .precopy > button.copy{position:absolute;top:6px;right:6px;z-index:2;
+    background:var(--panel2);color:var(--muted);border:1px solid var(--line);border-radius:6px;
+    padding:3px 9px;font-size:11px;font-weight:600;letter-spacing:.3px;cursor:pointer;
+    /* Visible at rest, not just on hover: a control nobody discovers is not a control.
+       Muted enough that it does not compete with the command it sits on. */
+    opacity:.5;transition:opacity .15s,color .15s,border-color .15s}
+  .precopy:hover > button.copy,.precopy > button.copy:focus{opacity:1}
+  .precopy > button.copy:hover{color:var(--ink);border-color:var(--accent)}
+  .precopy > button.copy.ok{color:var(--ok);border-color:var(--ok);opacity:1}
+  .precopy > button.copy.fail{color:var(--red);border-color:var(--red);opacity:1}
+  /* Note field — for any step that says "write this down". Persists like a checkbox. */
+  /* 28px lines the note up with the checkbox's text, not the checkbox itself —
+     it belongs to the item above it and should read that way. */
+  .notebox{display:block;margin:8px 0 2px 28px}
+  .notebox > .lbl{display:block;font-size:11.5px;font-weight:600;letter-spacing:.3px;
+    color:var(--muted);margin-bottom:4px}
+  .notebox textarea{display:block;width:100%;min-height:52px;resize:vertical;
+    background:#0b0f1a;color:#cfe0ff;border:1px solid var(--line);border-radius:8px;
+    padding:8px 10px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:12.5px;line-height:1.5}
+  .notebox textarea:focus{outline:none;border-color:var(--accent)}
+  .notebox textarea.filled{border-color:#2f6a4a}
+  .notebox .saved{font-size:11px;color:var(--ok);margin-top:3px;height:13px}
+  .gatepill{display:inline-block;font-size:10.5px;font-weight:700;letter-spacing:.5px;
+    color:#1a0308;background:var(--red);border-radius:5px;padding:1px 6px;margin-right:6px;vertical-align:middle}
+  .note{font-size:12.5px;color:var(--muted);margin:14px 0 0}
+  /* Checkbox index (1a, 1b, 1b.2). The JS adds one to every checkbox; see the bottom script. */
+  .idx{display:inline-block;min-width:2.6em;margin-right:8px;padding:0 6px;border-radius:5px;background:#24304a;color:#9fc1ff;
+       font:600 11.5px/1.7 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;text-align:center;vertical-align:1px}
+  .sub-checks .idx{background:#1f283c;color:#8aa6d8}
+  a{color:var(--accent)}
+  /* long URLs in prose wrap instead of widening the card */
+  .t a,.why a,.lead a,.info a,.banner a,.note a{overflow-wrap:anywhere}
+  table{width:100%;border-collapse:collapse;font-size:12px;margin:8px 0}
+  td,th{border-bottom:1px solid var(--line);padding:4px 6px;text-align:left;vertical-align:top}
+  th{color:var(--muted);font-weight:600}
+  details{margin:10px 0;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px 12px}
+  summary{cursor:pointer}
+  details ul{margin:8px 0;padding-left:18px;font-size:12.5px}
+  .why code,td code{overflow-wrap:anywhere}
+  /* Who does the box. Put the tag right after the .idx in .t; the JS filter reads it. */
+  .who{display:inline-block;margin-right:8px;padding:0 6px;border-radius:5px;font:700 10px/1.75 -apple-system,BlinkMacSystemFont,sans-serif;letter-spacing:.4px;vertical-align:1px;white-space:nowrap}
+  .who-claude{background:#553c9a;color:#efe7ff} .who-both{background:#2c7a7b;color:#e6fffa} .who-you{background:#975a16;color:#fffaf0}
+  /* A claim the automated suite could not prove: these boxes matter most. */
+  .unv{display:inline-block;margin-left:6px;padding:0 6px;border-radius:5px;font:700 10px/1.75 -apple-system,BlinkMacSystemFont,sans-serif;letter-spacing:.4px;vertical-align:1px;white-space:nowrap;background:rgba(240,180,41,.14);color:var(--amber);border:1px solid #6b5417}
+  /* Ready-to-paste prompt for Claude Code. The [pre class="prompt"] gets a copy button like any [pre]. */
+  .claude-prompt{margin:8px 0 2px;padding:6px 10px;border-left:3px solid #805ad5;background:#1a1530;border-radius:6px;font-size:12px;color:#d6bcfa}
+  .claude-prompt.batch{margin:0 0 12px}
+  pre.prompt{background:#120f22;border-color:#44337a;color:#e9d8fd;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px}
+  .filter{display:inline-flex;gap:4px;align-items:center;color:var(--muted);font-size:12px;margin-right:8px}
+  .filter button{background:var(--panel2);color:var(--muted);border:1px solid var(--line);border-radius:7px;padding:5px 9px;cursor:pointer;font-size:12px}
+  .filter button.on{color:var(--ink);border-color:var(--accent)}
+  body[data-filter="you"] ul.checks > li:not([data-who~="you"]){display:none}
+  body[data-filter="claude"] ul.checks > li:not([data-who~="claude"]){display:none}
+  body[data-filter="you"] .claude-prompt{display:none}
+  /* What actually happened, written into the box once it is done. */
+  .donenote{display:block;margin:.35em 0 .55em;padding:.45em .7em;border-left:3px solid #2e9d5b;background:rgba(46,157,91,.10);border-radius:4px}
+  .donenote.skipnote{border-left-color:#b7791f;background:rgba(183,121,31,.10)}
+  /* Optional stages for long runbooks: a .phasebar divider plus a .phase pill in each h2. */
+  .phase{display:inline-block;font-size:10.5px;font-weight:700;letter-spacing:.5px;padding:2px 7px;border-radius:5px;margin-right:8px;vertical-align:2px;white-space:nowrap}
+  .ph-pre{background:#2b6cb0;color:#eaf4ff} .ph-post{background:#2f855a;color:#eafff3} .ph-both{background:#6b46c1;color:#f3edff}
+  .ph-wipe{background:var(--red);color:#1a0308} .ph-ref{background:#4a5568;color:#e2e8f0}
+  .phasebar{margin:34px 0 6px;padding:10px 16px;border-radius:10px;font-weight:800;letter-spacing:.6px;font-size:14px}
+  .phasebar.ph-pre{background:#1d3b63;color:#d6e9ff;border:1px solid #2b6cb0}
+  .phasebar.ph-wipe{background:#3a1520;color:#ffd0d8;border:1px solid var(--red)}
+  .phasebar.ph-post{background:#173a2a;color:#d3ffe6;border:1px solid #2f855a}
+  .phasebar.ph-ref{background:#2a3140;color:#cbd5e0;border:1px solid #4a5568}
+  @media (max-width:640px){ .progwrap{flex-wrap:wrap} .bar{flex-basis:100%} }
+  @media print{ header{position:static} .filter,button.reset,button.copy{display:none} }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1>Setup Wizard — Test Runbook</h1>
+    <p class="sub">Validates <code>npm run setup</code> (branch <code>feat/setup-wizard</code>) against a real Cloudflare account and a real Google account, end to end, the way your coworker will run it.</p>
+    <div class="progwrap">
+      <div class="bar"><i id="fill"></i></div>
+      <span class="pct" id="pct">0 / 0 · 0%</span>
+      <span class="filter">Show: <button data-f="all" class="on">All</button><button data-f="you">You</button><button data-f="claude">Claude</button></span>
+      <button class="reset" id="reset">Reset all</button>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <div class="info"><b>Who does each box:</b> <span class="who who-claude">CLAUDE</span> Claude can do it (it asks before anything risky) · <span class="who who-both">YOU + CLAUDE</span> you do the login or click, Claude does the rest · <span class="who who-you">YOU</span> only you. 6 boxes are CLAUDE, 1 is YOU + CLAUDE, 20 are YOU: the wizard is a page you click through, so most of this is yours. CLAUDE boxes carry a ready-to-paste prompt. Use <b>Show</b> in the header to see only your boxes or only Claude's. Boxes marked <span class="unv">UNVERIFIED</span> are claims the automated tests could not prove (they ran against a faked wrangler and faked Cloudflare/Google responses); they matter most.</div>
+
+  <div class="info"><b>Checkbox numbers:</b> every checkbox has an index made of its section and a letter: <code>2a</code> is the first box in section 2. Use them to report back ("3d failed: Zero Trust would not take the workers.dev hostname"). Each is also a link target: add <code>#ix-2a</code> to the page address to jump there. If a pasted command 404s from something you can see is up, look for a backslash in what your shell received.</div>
+
+  <div class="info"><b>Already proven by the automated suite (505/505, not repeated here):</b> validators and wrangler-output parsers; <code>wrangler.jsonc</code> edits keep every comment; secrets go to <code>wrangler secret put</code> on stdin and are never in argv, responses or the state file; steps refuse to run out of order; the test-failure gate stops a deploy; any admin path answering 200 is a hard stop; a <code>/meet</code> locked by Access fails the check; the local server enforces its token, Host and Origin checks and runs one action at a time. Seven of these gates were mutation-tested (each broken on purpose → its test failed). The leak-check test no longer blocks the deploy once your own email and name are filled in (simulated with a work-domain email and a surname; the untouched template is still checked). The page was rendered and inspected at 820px and 500px. The deploy bundle contains no wizard code.</div>
+
+  <div class="banner">
+    <h3>⚠️ RULES — read before 1a</h3>
+    <ul>
+      <li><b>Use a Cloudflare account that does not already run meet-kit.</b> The wizard deploys a Worker named <code>meet-kit</code> and reuses any D1 database named <code>meet-kit</code>. On your own account that would overwrite your live booking page and point it at your real bookings.</li>
+      <li>Run it from the fresh clone made in 0a, never from your working repo: the wizard edits <code>wrangler.jsonc</code> and <code>meet.config.json</code>.</li>
+      <li>Never paste a secret into Claude Code. Secrets go only into the wizard page.</li>
+      <li>If any admin page (<code>/admin/</code>, <code>/api/admin/…</code>) ever loads without the Access login, stop and report it.</li>
+    </ul>
+    <p style="margin:8px 0 0;color:#f4c6ce;font-size:12.5px">Rollback = section 7: delete the test Worker, D1 database, Turnstile widget, Access application and Google Cloud project. Nothing on <code>main</code> changes until 8b.</p>
+  </div>
+
+  <section class="step">
+    <div class="head"><span class="num">0</span><h2>Prepare a clean copy</h2><span class="badge b-safe">LOCAL</span></div>
+    <div class="body">
+      <p class="lead">A fresh clone of the branch, exactly what your coworker gets, with the test suite green before anything touches Cloudflare.</p>
+      <ul class="checks">
+        <li><label class="chk"><input type="checkbox" id="s0-01"><span class="txt"><span class="t"><span class="idx" id="ix-0a">0a</span><span class="who who-claude">CLAUDE</span>Fresh clone of the branch, install, run the tests</span><span class="why"><b>Pass:</b> the clone exists at <code>~/Development/meet-kit-wizard-test</code> on branch <code>feat/setup-wizard</code>, <code>npm ci</code> succeeds and <code>npm test</code> reports <code>fail 0</code>. Needs the branch committed first: if it is not, Claude stops and asks.<pre>git clone --branch feat/setup-wizard ~/Development/meet-kit ~/Development/meet-kit-wizard-test
+cd ~/Development/meet-kit-wizard-test
+npm ci
+npm test</pre><div class="claude-prompt"><b>Prompt for Claude</b> (paste into Claude Code):<pre class="prompt">Open the runbook at ~/Development/meet-kit/docs/plans/2026-10-13-setup-wizard-runbook.html and do checkbox 0a ("Fresh clone of the branch, install, run the tests"). Read that box's text, run its command blocks in order, and check its Pass line. Stop and show me the output if anything fails or the box says to stop. Ask me before any push, deploy, delete, restart, or quitting an app. Never print secret values.</pre></div></span></span></label></li>
+        <li><label class="chk"><input type="checkbox" id="s0-02"><span class="txt"><span class="t"><span class="idx" id="ix-0b">0b</span><span class="who who-you">YOU</span>Pick the Cloudflare account and confirm it has no meet-kit</span><span class="why"><b>Pass:</b> in https://dash.cloudflare.com → <b>Workers &amp; Pages</b> there is no Worker called <code>meet-kit</code>, and under <b>Storage &amp; Databases → D1</b> no database called <code>meet-kit</code>. A brand-new free account is the cleanest test, because it is exactly what your coworker starts with (no workers.dev subdomain yet, no Zero Trust team yet).</span></span></label>
+          <div class="notebox"><span class="lbl">Which account (name or email), new or existing</span><textarea id="n0-02" rows="2" placeholder="e.g. new free account, test@…"></textarea><div class="saved"></div></div>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="step">
+    <div class="head"><span class="num">1</span><h2>Start the wizard</h2><span class="badge b-safe">LOCAL</span></div>
+    <div class="body">
+      <p class="lead">The real server and page, before any Cloudflare action.</p>
+      <ul class="checks">
+        <li><label class="chk"><input type="checkbox" id="s1-01"><span class="txt"><span class="t"><span class="idx" id="ix-1a">1a</span><span class="who who-you">YOU</span>Run it in your own terminal; the page opens by itself</span><span class="why"><b>Pass:</b> the terminal prints a link to <code>127.0.0.1</code> with a long <code>?t=…</code> token on the end, your default browser opens it, and the page shows ten steps with <b>Cloudflare login</b> marked Next and the rest greyed out. Keep this terminal open until section 6.<pre>cd ~/Development/meet-kit-wizard-test
+npm run setup</pre></span></span></label></li>
+        <li><label class="chk"><input type="checkbox" id="s1-02"><span class="txt"><span class="t"><span class="idx" id="ix-1b">1b</span><span class="who who-you">YOU</span>The page refuses a link without its token</span><span class="why"><b>Pass:</b> in a new tab, open the same link with everything from <code>?t=</code> onwards removed → the page says only "Open the link printed in the terminal."</span></span></label></li>
+        <li><label class="chk"><input type="checkbox" id="s1-03"><span class="txt"><span class="t"><span class="idx" id="ix-1c">1c</span><span class="who who-you">YOU</span>Looks right in your browser's dark mode</span><span class="why"><b>Pass:</b> with macOS set to Dark (System Settings → Appearance), reload: dark background, readable text and buttons, copy buttons visible. Only light mode was rendered by Claude.</span></span></label></li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="step">
+    <div class="head"><span class="num">2</span><h2>Wizard steps 1–4: login, profile, database, first deploy</h2><span class="badge b-warn">CREATES CLOUDFLARE RESOURCES</span></div>
+    <div class="body">
+      <p class="lead">The steps the wizard runs on its own. This is the first time it drives real wrangler output, so watch each result message.</p>
+      <ul class="checks">
+        <li><label class="chk"><input type="checkbox" id="s2-01"><span class="txt"><span class="t"><span class="idx" id="ix-2a">2a</span><span class="who who-you">YOU</span>Step 1: Log in to Cloudflare<span class="unv">UNVERIFIED</span></span><span class="why"><b>Pass:</b> pressing <b>Log in to Cloudflare</b> opens a Cloudflare consent page (launched by wrangler, from inside the wizard, with no terminal); after <b>Allow</b> the card turns green ("Logged in as …, account …"). If your login has several accounts, a picker appears: choose the one from 0b. <b>Unverified:</b> that <code>wrangler login</code> completes when started without a terminal attached.</span></span></label></li>
+        <li><label class="chk"><input type="checkbox" id="s2-02"><span class="txt"><span class="t"><span class="idx" id="ix-2b">2b</span><span class="who who-you">YOU</span>Step 2: About you, including a deliberate mistake</span><span class="why"><b>Pass:</b> first type an email without <code>@</code> and press <b>Save</b> → the field turns red with "Enter the email…", and <b>everything else you typed is still there</b>. Fix it, choose Gmail or Workspace to match the calendar account you will use in 3a, save → "Saved." and the card turns green.</span></span></label></li>
+        <li><label class="chk"><input type="checkbox" id="s2-03"><span class="txt"><span class="t"><span class="idx" id="ix-2c">2c</span><span class="who who-claude">CLAUDE</span>Step 2 wrote the right files, comments intact</span><span class="why"><b>Pass:</b> <code>git diff</code> in the clone shows <code>meet.config.json</code> with your values and exactly one changed line in <code>wrangler.jsonc</code> (<code>OWNER_EMAIL</code>); every <code>//</code> comment is unchanged; <code>.setup-state.json</code> exists and is ignored by git.<pre>cd ~/Development/meet-kit-wizard-test
+git diff --stat
+git diff wrangler.jsonc
+git status --short --ignored .setup-state.json</pre><div class="claude-prompt"><b>Prompt for Claude</b> (paste into Claude Code):<pre class="prompt">Open the runbook at ~/Development/meet-kit/docs/plans/2026-10-13-setup-wizard-runbook.html and do checkbox 2c ("Step 2 wrote the right files, comments intact"). Read that box's text, run its command blocks in order, and check its Pass line. Stop and show me the output if anything fails or the box says to stop. Ask me before any push, deploy, delete, restart, or quitting an app. Never print secret values.</pre></div></span></span></label></li>
+        <li><label class="chk"><input type="checkbox" id="s2-04"><span class="txt"><span class="t"><span class="idx" id="ix-2d">2d</span><span class="who who-you">YOU</span>Step 3: Create the database<span class="unv">UNVERIFIED</span></span><span class="why"><b>Pass:</b> "Database ready (6 tables)." and <b>not</b> "This reused the meet-kit database already in this Cloudflare account" (that would mean 0b missed one: stop). <b>Unverified:</b> the real <code>d1 list --json</code> and <code>d1 execute --json</code> output shapes the wizard parses.</span></span></label></li>
+        <li><label class="chk"><input type="checkbox" id="s2-05"><span class="txt"><span class="t"><span class="idx" id="ix-2e">2e</span><span class="who who-you">YOU</span>Step 4: Test and publish<span class="unv">UNVERIFIED</span></span><span class="why"><b>Pass:</b> after roughly 10–60 seconds, "Live at …workers.dev. /meet is up and admin is locked." On a new account, expect first a red message with an <b>Open Cloudflare</b> button asking for a workers.dev subdomain: open it, choose a subdomain, come back, press <b>Test and publish</b> again. <b>Unverified:</b> that deploy's non-terminal output contains the onboarding link and then the workers.dev URL.</span></span></label>
+          <div class="notebox"><span class="lbl">Your site address (used in 2f, 4b and 7a)</span><textarea id="n2-05" rows="1" placeholder="https://meet-kit.<subdomain>.workers.dev"></textarea><div class="saved"></div></div>
+        </li>
+        <li><label class="chk"><input type="checkbox" id="s2-06"><span class="txt"><span class="t"><span class="idx" id="ix-2f">2f</span><span class="who who-claude">CLAUDE</span>Independent probe of the first deploy</span><span class="why"><b>Pass:</b> <code>200</code> for <code>/meet</code>, <code>403</code> for <code>/api/admin/config</code>. Replace <code>&lt;url&gt;</code> with the address in note 2e.<pre>curl -s -o /dev/null -w "%{http_code}\n" &lt;url&gt;/meet
+curl -s -o /dev/null -w "%{http_code}\n" &lt;url&gt;/api/admin/config</pre><div class="claude-prompt"><b>Prompt for Claude</b> (paste into Claude Code):<pre class="prompt">Open the runbook at ~/Development/meet-kit/docs/plans/2026-10-13-setup-wizard-runbook.html and do checkbox 2f ("Independent probe of the first deploy"). The site address is in .setup-state.json ("url") in ~/Development/meet-kit-wizard-test. Read that box's text, run its command blocks in order, and check its Pass line. Stop and show me the output if anything fails or the box says to stop. Ask me before any push, deploy, delete, restart, or quitting an app. Never print secret values.</pre></div></span></span></label></li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="step">
+    <div class="head"><span class="num">3</span><h2>Wizard steps 5–7: Google, Turnstile, Access</h2><span class="badge b-warn">BROWSER DASHBOARDS</span></div>
+    <div class="body">
+      <p class="lead">The steps you do on other websites while the wizard waits. What is being tested is whether its instructions match what Google and Cloudflare actually show today. Note any wording or menu that differs.</p>
+      <ul class="checks">
+        <li><label class="chk"><input type="checkbox" id="s3-01"><span class="txt"><span class="t"><span class="idx" id="ix-3a">3a</span><span class="who who-you">YOU</span>Step 5: Google Cloud, following only the wizard's text<span class="unv">UNVERIFIED</span></span><span class="why"><b>Pass:</b> each of the wizard's links lands on the page it names (project create, Calendar API, Google Auth Platform); the menu names (<b>Data access</b>, <b>Audience</b>, <b>Clients</b>) exist; the redirect URI copy button works; pasting the Client ID and secret → "Google client saved." <b>Unverified:</b> Google console URLs and menu names as of today.</span></span></label>
+          <div class="notebox"><span class="lbl">Anything in Google's UI that did not match the wizard's text</span><textarea id="n3-01" rows="2" placeholder="e.g. 'Data access' is now called …"></textarea><div class="saved"></div></div>
+        </li>
+        <li><label class="chk"><input type="checkbox" id="s3-02"><span class="txt"><span class="t"><span class="idx" id="ix-3b">3b</span><span class="who who-claude">CLAUDE</span>The client secret reached Cloudflare and nowhere else</span><span class="why"><b>Pass:</b> <code>secret list</code> includes <code>GOOGLE_CLIENT_SECRET</code>; neither <code>.setup-state.json</code> nor <code>wrangler.jsonc</code> contains <code>GOCSPX</code> (the prefix Google gives client secrets); <code>wrangler.jsonc</code> has your client ID in <code>GOOGLE_CLIENT_ID</code>.<pre>cd ~/Development/meet-kit-wizard-test
+npx wrangler secret list
+grep -c GOCSPX .setup-state.json wrangler.jsonc
+grep -n GOOGLE_CLIENT_ID wrangler.jsonc</pre><div class="claude-prompt"><b>Prompt for Claude</b> (paste into Claude Code):<pre class="prompt">Open the runbook at ~/Development/meet-kit/docs/plans/2026-10-13-setup-wizard-runbook.html and do checkbox 3b ("The client secret reached Cloudflare and nowhere else"). Read that box's text, run its command blocks in order, and check its Pass line. If wrangler needs an account id, take accountId from .setup-state.json and pass it as CLOUDFLARE_ACCOUNT_ID. Stop and show me the output if anything fails or the box says to stop. Ask me before any push, deploy, delete, restart, or quitting an app. Never print secret values.</pre></div></span></span></label></li>
+        <li><label class="chk"><input type="checkbox" id="s3-03"><span class="txt"><span class="t"><span class="idx" id="ix-3c">3c</span><span class="who who-you">YOU</span>Step 6: Turnstile, with a wrong secret first<span class="unv">UNVERIFIED</span></span><span class="why"><b>Pass:</b> paste the real site key and the secret key <b>with its last character changed</b> → refused with "Cloudflare says this secret key is invalid."; then paste the real secret → "Turnstile saved." <b>Unverified:</b> that Cloudflare's siteverify answers <code>invalid-input-secret</code> for a bad secret and something else for a good one.</span></span></label></li>
+        <li><label class="chk"><input type="checkbox" id="s3-04"><span class="txt"><span class="t"><span class="idx" id="ix-3d">3d</span><span class="who who-you">YOU</span>Step 7: Access, a self-hosted app on the workers.dev hostname<span class="unv">UNVERIFIED</span></span><span class="why"><b>Pass:</b> Zero Trust lets you create a <b>Self-hosted</b> application whose public hostnames are the workers.dev host with paths <code>admin</code> and <code>api/admin</code>; pasting the team domain and AUD → "Access saved." <b>This is the claim most likely to fail:</b> the self-hosted hostname field may only offer domains on your Cloudflare DNS, not <code>*.workers.dev</code>. If so, write what it offered below and stop; the fallback is a custom domain, which the wizard does not cover yet.</span></span></label>
+          <div class="notebox"><span class="lbl">What the hostname field accepted or offered</span><textarea id="n3-04" rows="2" placeholder="e.g. free-text domain accepted / only a dropdown of my zones"></textarea><div class="saved"></div></div>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="step">
+    <div class="head"><span class="num">4</span><h2>Wizard step 8: redeploy and lock check</h2><span class="badge b-warn">DEPLOYS</span></div>
+    <div class="body">
+      <p class="lead">The wizard's own lock check, then the same probes run independently so a wizard bug cannot mark itself passed.</p>
+      <ul class="checks">
+        <li><label class="chk"><input type="checkbox" id="s4-01"><span class="txt"><span class="t"><span class="idx" id="ix-4a">4a</span><span class="who who-you">YOU</span>Step 8: Publish and check</span><span class="why"><b>Pass:</b> "Admin is locked behind Access and /meet is public." Any message starting "STOP:" is a hard failure: stop and report it.</span></span></label></li>
+        <li><label class="chk"><input type="checkbox" id="s4-02"><span class="txt"><span class="t"><span class="idx" id="ix-4b">4b</span><span class="who who-claude">CLAUDE</span>Independent lock probes (DEPLOY-AGENT.md step 8)</span><span class="why"><b>Pass:</b> <code>/admin/</code> → <code>302</code> to <code>https://&lt;team&gt;.cloudflareaccess.com/…</code>; <code>/api/admin/config</code> → <code>403</code> or <code>302</code>; both bypass forms → not <code>200</code>; <code>/meet</code> → <code>200</code>. <b>Any 200 from an admin path is a failure.</b><pre>curl -s -o /dev/null -w "%{http_code} %{redirect_url}\n" &lt;url&gt;/admin/
+curl -s -o /dev/null -w "%{http_code} %{redirect_url}\n" &lt;url&gt;/api/admin/config
+curl -s -o /dev/null -w "%{http_code} %{redirect_url}\n" --path-as-is "&lt;url&gt;/%61dmin/"
+curl -s -o /dev/null -w "%{http_code} %{redirect_url}\n" --path-as-is "&lt;url&gt;//admin/"
+curl -s -o /dev/null -w "%{http_code}\n" &lt;url&gt;/meet</pre><div class="claude-prompt"><b>Prompt for Claude</b> (paste into Claude Code):<pre class="prompt">Open the runbook at ~/Development/meet-kit/docs/plans/2026-10-13-setup-wizard-runbook.html and do checkbox 4b ("Independent lock probes"). The site address is "url" in ~/Development/meet-kit-wizard-test/.setup-state.json. Read that box's text, run its command blocks in order, and check its Pass line. Stop and show me the output if anything fails or the box says to stop. Ask me before any push, deploy, delete, restart, or quitting an app. Never print secret values.</pre></div></span></span></label></li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="step">
+    <div class="head"><span class="num">5</span><h2>Wizard steps 9–10: calendar and a real booking</h2><span class="badge b-warn">SENDS REAL INVITES</span></div>
+    <div class="body">
+      <p class="lead">These run on the deployed admin page, not in the wizard; the wizard only links there and records that you did them.</p>
+      <ul class="checks">
+        <li><label class="chk"><input type="checkbox" id="s5-01"><span class="txt"><span class="t"><span class="idx" id="ix-5a">5a</span><span class="who who-you">YOU</span>Step 9: connect the calendar from the wizard's link</span><span class="why"><b>Pass:</b> <b>Open my admin page</b> → Access emails a code to the owner email → admin loads; <b>Connect booking account</b> succeeds; pick a calendar; Save → "Saved."; back in the wizard, <b>I've done this</b> turns step 9 green.</span></span></label></li>
+        <li><label class="chk"><input type="checkbox" id="s5-02"><span class="txt"><span class="t"><span class="idx" id="ix-5b">5b</span><span class="who who-you">YOU</span>Step 10: book and cancel from another address</span><span class="why"><b>Pass:</b> the booking page shows the name, title and accent colour from 2b and a Turnstile check; booking from a different email sends an invite with a video link and puts the event on the calendar; cancelling it in bookings sends a cancellation and removes the event. Press <b>Both worked</b>.</span></span></label></li>
+        <li><label class="chk"><input type="checkbox" id="s5-03"><span class="txt"><span class="t"><span class="idx" id="ix-5c">5c</span><span class="who who-you">YOU</span>The finish banner</span><span class="why"><b>Pass:</b> the top of the wizard shows "You're live." with the <code>/meet</code> link and a working Copy button; the progress bar is full.</span></span></label></li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="step">
+    <div class="head"><span class="num">6</span><h2>Quit and resume</h2><span class="badge b-safe">LOCAL</span></div>
+    <div class="body">
+      <p class="lead">The promise on the page: close it and run setup again later.</p>
+      <ul class="checks">
+        <li><label class="chk"><input type="checkbox" id="s6-01"><span class="txt"><span class="t"><span class="idx" id="ix-6a">6a</span><span class="who who-you">YOU</span>Stop the program; the open page says so</span><span class="why"><b>Pass:</b> press Ctrl+C in the terminal, then click any step header in the still-open page and reload it → it says it lost contact (or the browser shows the server is gone), not a blank or broken page.</span></span></label></li>
+        <li><label class="chk"><input type="checkbox" id="s6-02"><span class="txt"><span class="t"><span class="idx" id="ix-6b">6b</span><span class="who who-you">YOU</span>Run it again: everything is still done</span><span class="why"><b>Pass:</b> <code>npm run setup</code> again opens a new link (new token); all ten steps show green and the finish banner is there. The old link from 1a is refused.<pre>cd ~/Development/meet-kit-wizard-test
+npm run setup</pre></span></span></label></li>
+        <li><label class="chk"><input type="checkbox" id="s6-03"><span class="txt"><span class="t"><span class="idx" id="ix-6c">6c</span><span class="who who-you">YOU</span>Re-saving an earlier step asks for a new lock check</span><span class="why"><b>Pass:</b> open step 6 (Turnstile), press <b>Save Turnstile</b> with the secret left empty → "Turnstile saved." and step 8 drops back to Next (settings changed, so they need publishing). Press <b>Publish and check</b> → green again.</span></span></label></li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="step">
+    <div class="head"><span class="num">7</span><h2>Clean up the test account</h2><span class="badge b-risk">DELETES</span></div>
+    <div class="body">
+      <p class="lead">Only for a throwaway test account. Skip this section if you will hand this same deployment over.</p>
+      <ul class="checks">
+        <li><label class="chk"><input type="checkbox" id="s7-01"><span class="txt"><span class="t"><span class="idx" id="ix-7a">7a</span><span class="who who-both">YOU + CLAUDE</span>Delete the Worker and the database</span><span class="why"><b>Pass:</b> after you say yes, Claude deletes the Worker and the D1 database; <code>/meet</code> at the note-2e address no longer answers 200.<pre>cd ~/Development/meet-kit-wizard-test
+npx wrangler delete meet-kit
+npx wrangler d1 delete meet-kit</pre><div class="claude-prompt"><b>Prompt for Claude</b> (paste into Claude Code):<pre class="prompt">Open the runbook at ~/Development/meet-kit/docs/plans/2026-10-13-setup-wizard-runbook.html and do checkbox 7a ("Delete the Worker and the database"). First show me the account name and id from .setup-state.json in ~/Development/meet-kit-wizard-test and ask me to confirm it is the throwaway test account; delete nothing until I say yes. Then run its commands with CLOUDFLARE_ACCOUNT_ID set to that id, and check its Pass line. Never print secret values. I will do the parts that need my logins, passwords or clicks: tell me exactly when and what, and wait for me.</pre></div></span></span></label></li>
+        <li><label class="chk"><input type="checkbox" id="s7-02"><span class="txt"><span class="t"><span class="idx" id="ix-7b">7b</span><span class="who who-you">YOU</span>Delete the dashboard pieces</span><span class="why"><b>Pass:</b> the Turnstile widget, the Access application (Zero Trust → Access → Applications) and the Google Cloud project are deleted. The Zero Trust team itself can stay; it is free.</span></span></label></li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="step gate">
+    <div class="head"><span class="num">8</span><h2>Merge to main</h2><span class="badge b-risk">MAIN</span></div>
+    <div class="body">
+      <p class="lead">Only after sections 0–6 are green, with any wording fixes from 3a and 3d folded in. Pushing is a separate decision.</p>
+      <ul class="checks">
+        <li><label class="chk gatechk"><input type="checkbox" id="s8-01"><span class="txt"><span class="t"><span class="idx" id="ix-8a">8a</span><span class="who who-you">YOU</span>Sections 0–6 green; no STOP message, no admin 200</span><span class="why">Report back by index, e.g. "all green" or "3d failed: …". Claude fixes failures on the branch before 8b.</span></span></label></li>
+        <li><label class="chk gatechk"><input type="checkbox" id="s8-02"><span class="txt"><span class="t"><span class="idx" id="ix-8b">8b</span><span class="who who-claude">CLAUDE</span><span class="gatepill">GATE</span>Merge feat/setup-wizard into main</span><span class="why"><b>Pass:</b> full suite green on the branch, <code>git merge --no-ff feat/setup-wizard</code> on <code>main</code>, suite green again on <code>main</code>; nothing pushed. Commits during 9:00–17:00 ET on weekdays need your two separate approvals.<pre>cd ~/Development/meet-kit
+npm test
+git switch main
+git merge --no-ff feat/setup-wizard
+npm test</pre><div class="claude-prompt"><b>Prompt for Claude</b> (paste into Claude Code):<pre class="prompt">Open the runbook at ~/Development/meet-kit/docs/plans/2026-10-13-setup-wizard-runbook.html and do checkbox 8b ("Merge feat/setup-wizard into main"). Ask me before merging, follow my working-hours commit rule, do not push. Read that box's text, run its command blocks in order, and check its Pass line. Stop and show me the output if anything fails.</pre></div></span></span></label></li>
+      </ul>
+    </div>
+  </section>
+
+  <p class="note">Every checkbox has an index (section + letter: <code class="mono">2a</code>, <code class="mono">4b</code>), so you can point at a step precisely; add <code class="mono">#ix-4b</code> to the address to jump to one. Links open in a new tab, so this page and its checks stay where they are. Checkbox state is saved in this browser (localStorage) and survives reloads. Open with <code class="mono">open ~/Development/meet-kit/docs/plans/2026-10-13-setup-wizard-runbook.html</code>.</p>
+
+</div>
+
+<script>
+(function(){
+  /* CHANGE THIS to a unique key per runbook so pages don't share state. */
+  var KEY = 'meetkit-setup-wizard-runbook-v1';
+
+  var boxes = Array.prototype.slice.call(document.querySelectorAll('input[type=checkbox]'));
+  var notes = Array.prototype.slice.call(document.querySelectorAll('.notebox textarea'));
+
+  /* State is {v:2, checks:{id:1}, notes:{id:"text"}}. v1 was a flat {id:1} of checks
+     only, so a page saved before notes existed still restores. */
+  var state = { v:2, checks:{}, notes:{} };
+  try {
+    var raw = JSON.parse(localStorage.getItem(KEY) || '{}');
+    if (raw && raw.v === 2) { state = { v:2, checks: raw.checks || {}, notes: raw.notes || {} }; }
+    else if (raw && typeof raw === 'object') { state.checks = raw; }   /* migrate v1 */
+  } catch(e){ /* corrupt or unreadable: start clean rather than throw */ }
+
+  function persist(){
+    state.checks = {}; boxes.forEach(function(b){ if(b.checked) state.checks[b.id] = 1; });
+    state.notes = {}; notes.forEach(function(n){ if(n.value.trim()) state.notes[n.id] = n.value; });
+    try { localStorage.setItem(KEY, JSON.stringify(state)); } catch(e){ /* private mode: page still works, just won't persist */ }
+  }
+  function syncLabel(cb){ var l = cb.closest('label.chk'); if(l) l.classList.toggle('done', cb.checked); }
+  function update(){
+    var total = boxes.length, done = boxes.filter(function(b){return b.checked;}).length;
+    var pct = total ? Math.round(done*100/total) : 0;
+    document.getElementById('fill').style.width = pct + '%';
+    document.getElementById('pct').textContent = done + ' / ' + total + ' · ' + pct + '%';
+  }
+
+  boxes.forEach(function(b){
+    if(state.checks[b.id]) b.checked = true;
+    syncLabel(b);
+    b.addEventListener('change', function(){ syncLabel(b); persist(); update(); });
+  });
+
+  /* ---- notes: restore, then save as you type (debounced) ---- */
+  notes.forEach(function(n){
+    var flag = n.parentNode.querySelector('.saved'), timer = null;
+    if(state.notes[n.id]) n.value = state.notes[n.id];
+    n.classList.toggle('filled', !!n.value.trim());
+    n.addEventListener('input', function(){
+      n.classList.toggle('filled', !!n.value.trim());
+      clearTimeout(timer);
+      timer = setTimeout(function(){
+        persist();
+        if(flag){ flag.textContent = 'saved'; setTimeout(function(){ flag.textContent=''; }, 1200); }
+      }, 400);
+    });
+  });
+
+  /* ---- copy buttons: injected into every [pre], so authors write a plain [pre] ---- */
+  function copyText(text, btn){
+    function done(ok){
+      btn.textContent = ok ? 'copied' : 'press ⌘C';
+      btn.classList.add(ok ? 'ok' : 'fail');
+      setTimeout(function(){ btn.textContent='copy'; btn.classList.remove('ok','fail'); }, 1400);
+    }
+    /* navigator.clipboard needs a secure context; a runbook opened over file:// is
+       often not one, so fall back to a selection + execCommand rather than fail. */
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(function(){ done(true); }, function(){ legacy(); });
+    } else { legacy(); }
+    function legacy(){
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly','');
+      ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
+      document.body.appendChild(ta); ta.select();
+      var ok = false;
+      try { ok = document.execCommand('copy'); } catch(e){ ok = false; }
+      document.body.removeChild(ta);
+      done(ok);
+    }
+  }
+  Array.prototype.slice.call(document.querySelectorAll('pre')).forEach(function(pre){
+    var wrap = document.createElement('div');
+    wrap.className = 'precopy';
+    pre.parentNode.insertBefore(wrap, pre);
+    wrap.appendChild(pre);
+    var btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'copy'; btn.textContent = 'copy';
+    btn.setAttribute('aria-label','Copy this command');
+    btn.addEventListener('click', function(ev){
+      /* a [pre] can sit inside a [label]; without this the click toggles the checkbox.
+         Bracketed, not angled: a literal tag here breaks every naive tag-balance check. */
+      ev.preventDefault(); ev.stopPropagation();
+      copyText(pre.textContent.replace(/\s+$/,''), btn);
+    });
+    wrap.appendChild(btn);
+  });
+
+  document.getElementById('reset').addEventListener('click', function(){
+    if(!confirm('Clear all checkboxes?')) return;
+    boxes.forEach(function(b){ b.checked = false; syncLabel(b); });
+    /* Notes are typed by hand, so they are not collateral of a checkbox reset. */
+    var typed = notes.filter(function(n){ return n.value.trim(); }).length;
+    if(typed && confirm('Also clear the ' + typed + ' note(s) you have written?')){
+      notes.forEach(function(n){ n.value=''; n.classList.remove('filled'); });
+    }
+    persist(); update();
+  });
+
+  /* ---- links: every http(s) URL written in the prose becomes a link that opens a new tab.
+     The runbook is a file:// page holding unsaved-looking state, so navigating away from it
+     in place is the wrong default. Bare URLs are wrapped; authored [a] tags get target/rel.
+     Skipped: anything inside a [pre] (commands are for pasting, and a clickable curl URL
+     invites a stray GET), [textarea], [button], and in-page anchors like #ix-2c.
+     A link inside a [label] does not toggle its checkbox: the label's activation does
+     nothing when the click lands on interactive content. ---- */
+  var URL_RE = /https?:\/\/[^\s<>"'`]+/g;
+  function trimUrl(u){
+    /* drop sentence punctuation, and a ")" that closes prose rather than the URL */
+    for(;;){
+      var last = u.slice(-1);
+      if(/[.,;:!?'"\]]/.test(last)){ u = u.slice(0, -1); continue; }
+      if(last === ')' && (u.split('(').length < u.split(')').length)){ u = u.slice(0, -1); continue; }
+      return u;
+    }
+  }
+  function newTab(a){ a.target = '_blank'; a.rel = 'noopener noreferrer'; }
+  var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+    acceptNode: function(n){
+      return (n.parentNode.closest('pre, a, script, style, textarea, button') || !/https?:\/\//.test(n.nodeValue))
+        ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
+    }
+  });
+  var textNodes = []; while(walker.nextNode()) textNodes.push(walker.currentNode);
+  textNodes.forEach(function(node){
+    var text = node.nodeValue, frag = document.createDocumentFragment(), at = 0, m;
+    URL_RE.lastIndex = 0;
+    while((m = URL_RE.exec(text))){
+      var url = trimUrl(m[0]);
+      frag.appendChild(document.createTextNode(text.slice(at, m.index)));
+      var a = document.createElement('a'); a.href = url; a.textContent = url; newTab(a);
+      frag.appendChild(a);
+      at = m.index + url.length; URL_RE.lastIndex = at;
+    }
+    frag.appendChild(document.createTextNode(text.slice(at)));
+    node.parentNode.replaceChild(frag, node);
+  });
+  Array.prototype.slice.call(document.querySelectorAll('a[href]')).forEach(function(a){
+    if(/^https?:\/\//i.test(a.getAttribute('href')) && !a.closest('pre')) newTab(a);
+  });
+
+  /* ---- checkbox indices: every checkbox gets a visible label like 1a, 1b … 1z, 1aa; a
+     sub-check gets its parent's label plus .1, .2 (1b.2). Built from each section's .num text,
+     so the operator can say "1c failed". Each index is also an anchor: page.html#ix-1c.
+     Labels already written into the page (a [span class="idx"]) are left alone, so a generator
+     that numbers statically, e.g. to rewrite cross-references in prose, wins over this. ---- */
+  function letters(n){ var s = ''; n += 1; while(n){ var r = (n - 1) % 26; s = String.fromCharCode(97 + r) + s; n = Math.floor((n - 1) / 26); } return s; }
+  function tag(label, idx){
+    var t = label.querySelector('.t');
+    if(!t || t.querySelector('.idx')) return;
+    var s = document.createElement('span'); s.className = 'idx'; s.id = 'ix-' + idx; s.textContent = idx;
+    t.insertBefore(s, t.firstChild);
+  }
+  Array.prototype.slice.call(document.querySelectorAll('section.step')).forEach(function(sec){
+    var numEl = sec.querySelector('.head .num'); if(!numEl) return;
+    var num = numEl.textContent.trim();
+    var top = Array.prototype.slice.call(sec.querySelectorAll('ul.checks > li'));
+    top.forEach(function(li, i){
+      var idx = num + letters(i);
+      var lab = li.querySelector(':scope > label.chk'); if(lab) tag(lab, idx);
+      Array.prototype.slice.call(li.querySelectorAll('ul.sub-checks > li')).forEach(function(sub, j){
+        var sl = sub.querySelector(':scope > label.chk'); if(sl) tag(sl, idx + '.' + (j + 1));
+      });
+    });
+  });
+  if(location.hash){ var target = document.getElementById(location.hash.slice(1)); if(target) target.scrollIntoView(); }
+
+  /* ---- who-filter: tag each top-level li with who can run it from its [span class="who"]
+     (YOU + CLAUDE matches both views), then Show: All / You / Claude toggles body[data-filter].
+     A box with no who tag stays visible only under All. ---- */
+  Array.prototype.slice.call(document.querySelectorAll('ul.checks > li')).forEach(function(li){
+    var w = li.querySelector('.who'); if(!w) return;
+    li.setAttribute('data-who', w.classList.contains('who-both') ? 'you claude' : (w.classList.contains('who-claude') ? 'claude' : 'you'));
+  });
+  Array.prototype.slice.call(document.querySelectorAll('.filter button')).forEach(function(btn){
+    btn.addEventListener('click', function(){
+      document.body.setAttribute('data-filter', btn.getAttribute('data-f'));
+      Array.prototype.slice.call(document.querySelectorAll('.filter button')).forEach(function(x){ x.classList.toggle('on', x === btn); });
+    });
+  });
+
+  update();
+})();
+</script>
+</body>
+</html>
