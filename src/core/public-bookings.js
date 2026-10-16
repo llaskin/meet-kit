@@ -46,6 +46,47 @@ export async function listUpcomingPublic(db, nowIso) {
 }
 
 /**
+ * Live public bookings that have already ENDED, newest first, back to
+ * `fromIso`. Feeds the admin "Recent" list where a meeting is marked as a
+ * no-show. listUpcomingPublic is deliberately untouched: the two windows are
+ * disjoint (end >= now vs end < now), so a row is in exactly one list.
+ */
+export async function listRecentPublic(db, fromIso, nowIso) {
+  const { results } = await db
+    .prepare(
+      `SELECT * FROM public_bookings WHERE end_utc < ? AND end_utc >= ? ORDER BY start_utc DESC`,
+    )
+    .bind(nowIso, fromIso)
+    .all()
+  return results || []
+}
+
+/**
+ * Stamp a booking as a no-show. The row stays in public_bookings: the
+ * meeting happened (or didn't), it was not cancelled, and its slot is in the
+ * past so the UNIQUE(start_utc) reservation no longer matters.
+ *
+ * Idempotent by construction: the UPDATE is guarded by `no_show_at IS NULL`,
+ * so two concurrent marks cannot both "win" -- exactly one caller sees
+ * `already: false`, which is what gates the single booking.no_show event.
+ *
+ * @returns {{row: null} | {row: object, already: boolean}}
+ */
+export async function markNoShow(db, { id, at, by }) {
+  const row = await getPublicBooking(db, id)
+  if (!row) return { row: null }
+  if (row.no_show_at) return { row, already: true }
+  const res = await db
+    .prepare(`UPDATE public_bookings SET no_show_at = ?, no_show_by = ? WHERE id = ? AND no_show_at IS NULL`)
+    .bind(at, by ?? null, id)
+    .run()
+  // Lost a race with a concurrent mark: report what is stored, not what we
+  // tried to write.
+  if ((res?.meta?.changes ?? 1) === 0) return { row: await getPublicBooking(db, id), already: true }
+  return { row: { ...row, no_show_at: at, no_show_by: by ?? null }, already: false }
+}
+
+/**
  * MOVE a public booking into the cancellation ledger.
  *
  * Not a status flag. public_bookings declares UNIQUE (start_utc) as an inline
@@ -69,15 +110,18 @@ export async function cancelPublicBooking(db, { row, cancelledAt, cancelledBy })
       `INSERT OR IGNORE INTO public_bookings_cancelled
          (id, created_at, attendee_email, cap_identity, attendee_name, company, notes,
           duration_min, start_utc, end_utc, event_id, meet_url, client_ip, calendar_id,
-          meet_url_source, topic, cancelled_at, cancelled_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          meet_url_source, topic, no_show_at, no_show_by, cancelled_at, cancelled_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(
       row.id, row.created_at, row.attendee_email, row.cap_identity,
       row.attendee_name ?? null, row.company ?? null, row.notes ?? null,
       row.duration_min, row.start_utc, row.end_utc,
       row.event_id ?? null, row.meet_url ?? null, row.client_ip ?? null,
-      row.calendar_id ?? null, row.meet_url_source ?? null, row.topic ?? null, cancelledAt, cancelledBy ?? null,
+      row.calendar_id ?? null, row.meet_url_source ?? null, row.topic ?? null,
+      // A cancelled no-show keeps its stamp: the ledger is the only copy left.
+      row.no_show_at ?? null, row.no_show_by ?? null,
+      cancelledAt, cancelledBy ?? null,
     )
 
   const del = db.prepare(`DELETE FROM public_bookings WHERE id = ?`).bind(row.id)

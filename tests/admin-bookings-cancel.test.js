@@ -3,7 +3,7 @@ import test from 'node:test'
 import { realDB } from './helpers/d1.js'
 import * as store from '../src/core/calendar-store.js'
 import { googleApi } from '../src/core/google-calendar.js'
-import { savePublicBooking } from '../src/core/public-bookings.js'
+import { savePublicBooking, markNoShow } from '../src/core/public-bookings.js'
 import { onRequestGet } from '../src/handlers/admin-bookings.js'
 import { onRequestPost } from '../src/handlers/admin-cancel.js'
 
@@ -92,4 +92,120 @@ test('a failure BEFORE any Google delete: plain 500 that does not claim the meet
   assert.equal(called, false)
   const { error } = await res.json()
   assert.equal(error, 'Could not cancel the booking')
+})
+
+// ---------------------------------------------------------------------------
+// Outbound webhook: booking.cancelled is emitted once, through waitUntil,
+// only after the row moved -- never on 404 / 502 / 500.
+// ---------------------------------------------------------------------------
+
+import { createHmac } from 'node:crypto'
+import { webhookApi } from '../src/core/booking-webhook.js'
+
+const HOOK = { BOOKING_WEBHOOK_URL: 'https://example.com/hooks/meet', BOOKING_WEBHOOK_SECRET: 'shh' }
+const HOOK_ENV = (db) => ({ ...ENV(db), ...HOOK })
+const quiet = () => { const o = console.log; console.log = () => {}; return () => { console.log = o } }
+function hookStub() {
+  const hooks = []
+  webhookApi.fetch = async (url, opts) => { hooks.push({ url, opts }); return new Response(null, { status: 204 }) }
+  return hooks
+}
+async function cancelWith(db, id, env = HOOK_ENV(db)) {
+  const pending = []
+  const res = await onRequestPost({ request: cancelReq({ id }), env, owner: OWNER, waitUntil: (p) => pending.push(p) })
+  await Promise.all(pending)
+  return { res, pending }
+}
+
+test('cancel emits booking.cancelled once, after the row moved, with cancelled_at/by matching the ledger', async () => {
+  const { db, id } = await seed()
+  googleApi.fetch = async () => new Response(null, { status: 204 })
+  const hooks = hookStub()
+  const restore = quiet()
+  try {
+    const { res, pending } = await cancelWith(db, id)
+    assert.equal(res.status, 200)
+    assert.equal(pending.length, 1)
+    assert.equal(hooks.length, 1)
+    const { opts } = hooks[0]
+    assert.equal(opts.headers['X-Meet-Event'], 'booking.cancelled')
+    assert.equal(opts.headers['X-Meet-Signature-256'],
+      createHmac('sha256', HOOK.BOOKING_WEBHOOK_SECRET).update(opts.body, 'utf8').digest('hex'))
+    const body = JSON.parse(opts.body)
+    const led = db.raw.prepare('SELECT * FROM public_bookings_cancelled WHERE id = ?').get(id)
+    assert.equal(body.type, 'booking.cancelled')
+    assert.equal(body.id, id)
+    assert.equal(body.booking.id, id)
+    assert.equal(body.booking.attendee_email, 'v@example.org')
+    assert.equal(body.booking.topic, 'Audit review')
+    assert.equal(body.booking.cancelled_at, led.cancelled_at)
+    assert.equal(body.booking.cancelled_by, OWNER)
+    assert.equal('notes' in body.booking, false)
+    assert.equal('client_ip' in body.booking, false)
+  } finally { restore() }
+})
+
+test('cancel 404 (unknown id): no event', async () => {
+  const db = realDB()
+  const hooks = hookStub()
+  const { res } = await cancelWith(db, 'a-'.repeat(32))
+  assert.equal(res.status, 404)
+  assert.equal(hooks.length, 0)
+})
+
+test('cancel 502 (Google failure): no event', async () => {
+  const { db, id } = await seed()
+  googleApi.fetch = async () => new Response('{}', { status: 500 })
+  const hooks = hookStub()
+  const { res } = await cancelWith(db, id)
+  assert.equal(res.status, 502)
+  assert.equal(hooks.length, 0)
+})
+
+test('cancel 500 (record update failed after the Google delete): no event', async () => {
+  const { db, id } = await seed()
+  googleApi.fetch = async () => new Response(null, { status: 204 })
+  const hooks = hookStub()
+  db.raw.exec('DROP TABLE public_bookings_cancelled')
+  const { res } = await cancelWith(db, id)
+  assert.equal(res.status, 500)
+  assert.equal(hooks.length, 0)
+})
+
+test('cancel with the webhook unconfigured sends nothing', async () => {
+  const { db, id } = await seed()
+  googleApi.fetch = async () => new Response(null, { status: 204 })
+  const hooks = hookStub()
+  const { res } = await cancelWith(db, id, ENV(db))
+  assert.equal(res.status, 200)
+  assert.equal(hooks.length, 0)
+})
+
+// ---------------------------------------------------------------------------
+// Recent (past 14 days) list for the no-show action.
+// ---------------------------------------------------------------------------
+
+test('the list also returns recent (ended within 14 days) bookings, newest first, with noShowAt', async () => {
+  const { db } = await seed()   // one upcoming row (2099)
+  const day = 86_400_000
+  const iso = (ms) => new Date(ms).toISOString()
+  const now = Date.now()
+  const past = (name, startMs, over = {}) => savePublicBooking(db, { email: `${name}@example.org`, capIdentity: `${name}@example.org`,
+    durationMinutes: 30, startUtc: iso(startMs), endUtc: iso(startMs + 1_800_000), eventId: name, meetUrlSource: 'fixed',
+    calendarId: OWNER, topic: 'Audit review', notes: 'private stuff', clientIp: '203.0.113.9', ...over })
+  const a = await past('a', now - 2 * day)
+  const b = await past('b', now - 10 * day)
+  await past('old', now - 20 * day)
+  await markNoShow(db, { id: b, at: '2026-10-07T00:00:00.000Z', by: OWNER })
+
+  const { bookings, recent } = await (await onRequestGet({ env: ENV(db) })).json()
+  assert.equal(bookings.length, 1, 'upcoming list is unchanged')
+  assert.deepEqual(recent.map((r) => r.id), [a, b])
+  assert.deepEqual(Object.keys(recent[0]).sort(), [
+    'attendeeEmail', 'attendeeName', 'company', 'durationMin', 'end', 'id', 'meetUrl', 'meetUrlSource', 'noShowAt', 'notes', 'start', 'topic',
+  ])
+  assert.equal(recent[0].noShowAt, '')
+  assert.equal(recent[1].noShowAt, '2026-10-07T00:00:00.000Z')
+  assert.equal(recent[0].attendeeEmail, 'a@example.org')
+  assert.equal(recent[0].topic, 'Audit review')
 })

@@ -15,6 +15,8 @@ export function initBookings(doc) {
   const list = doc.getElementById('bk-list')
   const errBox = doc.getElementById('bk-error')
   const empty = doc.getElementById('bk-empty')
+  const recentList = doc.getElementById('bk-recent')
+  const recentEmpty = doc.getElementById('bk-recent-empty')
   if (!list) return false
 
   const fail = (msg) => { errBox.hidden = false; errBox.textContent = msg }
@@ -33,6 +35,15 @@ export function initBookings(doc) {
     const rows = data.bookings || []
     empty.hidden = rows.length > 0
     for (const b of rows) list.appendChild(renderRow(doc, b, load, fail))
+
+    // Recent (ended) meetings: no cancel -- the meeting is over -- only the
+    // no-show stamp.
+    if (recentList) {
+      recentList.innerHTML = ''
+      const recent = data.recent || []
+      if (recentEmpty) recentEmpty.hidden = recent.length > 0
+      for (const b of recent) recentList.appendChild(renderRecentRow(doc, b, load, fail))
+    }
     return true
   }
 
@@ -137,6 +148,75 @@ function renderRow(doc, b, reload, fail) {
         go.textContent = 'Cancel meeting and notify'
       }
     })
+  })
+
+  return row
+}
+
+// Same textContent-only rule as renderRow: every string here was typed by an
+// anonymous visitor and is rendered in the one session that can act on it.
+function renderRecentRow(doc, b, reload, fail) {
+  const row = doc.createElement('div')
+  row.className = 'bk-row'
+
+  const who = b.attendeeName || b.attendeeEmail || '(no name)'
+
+  const when = doc.createElement('div')
+  when.className = 'bk-when'
+  when.textContent = `${fmt(b.start)} · ${b.durationMin} min`
+
+  const line = doc.createElement('div')
+  line.className = 'bk-who'
+  line.textContent = `${who}${b.company ? ' · ' + b.company : ''} — ${b.attendeeEmail}`
+
+  row.appendChild(when)
+  row.appendChild(line)
+
+  if (b.topic) {
+    const topic = doc.createElement('div')
+    topic.className = 'bk-topic'
+    topic.textContent = `Topic: ${b.topic}`
+    row.appendChild(topic)
+  }
+
+  if (b.noShowAt) {
+    const stamp = doc.createElement('div')
+    stamp.className = 'bk-noshow-stamp'
+    stamp.textContent = `No-show · ${fmt(b.noShowAt)}`
+    row.appendChild(stamp)
+    return row
+  }
+
+  // One click, no confirm step: unlike cancel this emails nobody and deletes
+  // nothing, and the server refuses a second mark without a second event.
+  const mark = doc.createElement('button')
+  mark.type = 'button'
+  mark.className = 'bk-noshow'
+  mark.textContent = 'Mark no-show'
+  row.appendChild(mark)
+
+  mark.addEventListener('click', async () => {
+    mark.disabled = true
+    mark.textContent = 'Marking…'
+    try {
+      const r = await fetch('/api/admin/no-show', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: b.id }),
+      })
+      const out = await r.json()
+      if (!r.ok) {
+        fail(out.error || `Could not mark no-show (${r.status})`)
+        mark.disabled = false
+        mark.textContent = 'Mark no-show'
+        return
+      }
+      await reload()
+    } catch (e) {
+      fail(`Could not mark no-show: ${e.message}`)
+      mark.disabled = false
+      mark.textContent = 'Mark no-show'
+    }
   })
 
   return row

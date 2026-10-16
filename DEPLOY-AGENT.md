@@ -350,6 +350,41 @@ account: disconnect it first, then use **Connect booking account**.
 
 The agent reports each result as pass or fail.
 
+## 11. Optional: outbound webhook [agent, then you]
+
+Skip this unless another system should be told about bookings. What it sends,
+and how to verify the signature, is in `README.md` under "Webhook (optional)".
+
+1. Ask for the receiver's URL. It must start with `https://`. The agent sets
+   `vars.BOOKING_WEBHOOK_URL` in `wrangler.jsonc` to it.
+2. The person runs:
+
+   ```bash
+   ! npx wrangler secret put BOOKING_WEBHOOK_SECRET
+   ```
+
+   and enters a long random string (32 or more characters). The receiver needs
+   the same string; the agent never sees it.
+3. **Existing deployments only** (set up before the no-show action existed):
+   apply the migration first, or marking a no-show fails:
+
+   ```bash
+   npx wrangler d1 execute meet-kit --remote --file=migrations/002_booking_no_show.sql
+   ```
+
+   Fresh installs already have these columns from `schema.sql`.
+4. ```bash
+   npx wrangler deploy
+   ```
+
+**Check:** `npx wrangler secret list` includes `BOOKING_WEBHOOK_SECRET`. Then
+book a test slot on `<url>/meet`: the receiver gets one `booking.created` POST
+with a valid `X-Meet-Signature-256`, and `npx wrangler tail` shows
+`[booking-webhook] booking.created <id> -> <status>`. Cancel it from
+`<url>/admin/bookings.html` for a `booking.cancelled`. A `-> error` or non-2xx
+status in the log is the receiver's problem, not a failed booking: the booking
+itself always goes through.
+
 ---
 
 ## Troubleshooting
@@ -372,8 +407,9 @@ Pull the changes, test, apply any NEW migration files in order, then deploy:
 ```bash
 git pull upstream main
 npm install && npm test
-# one line per NEW migration since your last update, oldest first, e.g. for 001:
+# one line per NEW migration since your last update, oldest first, e.g. for 001 and 002:
 npx wrangler d1 execute meet-kit --remote --file=migrations/001_booking_topic.sql
+npx wrangler d1 execute meet-kit --remote --file=migrations/002_booking_no_show.sql
 npx wrangler deploy
 ```
 

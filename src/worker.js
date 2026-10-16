@@ -18,6 +18,7 @@ import * as adminConfig from './handlers/admin-config.js'
 import * as adminCalendars from './handlers/admin-calendars.js'
 import * as adminBookings from './handlers/admin-bookings.js'
 import * as adminCancel from './handlers/admin-cancel.js'
+import * as adminNoShow from './handlers/admin-no-show.js'
 import * as adminConnections from './handlers/admin-connections.js'
 import * as oauth from './handlers/oauth.js'
 import { ADMIN_HEADERS, PUBLIC_API_HEADERS, withHeaders } from './security-headers.js'
@@ -178,6 +179,7 @@ app.get('/api/admin/calendars', run(adminCalendars.onRequestGet))
 app.put('/api/admin/calendars', run(adminCalendars.onRequestPut))
 app.get('/api/admin/bookings', run(adminBookings.onRequestGet))
 app.post('/api/admin/cancel', run(adminCancel.onRequestPost))
+app.post('/api/admin/no-show', run(adminNoShow.onRequestPost))
 app.delete('/api/admin/connections/:id', run(adminConnections.onRequestDelete))
 app.get('/admin/oauth/:provider/start', run(oauth.start))
 app.get('/admin/oauth/:provider/callback', run(oauth.callback))

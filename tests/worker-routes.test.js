@@ -39,7 +39,7 @@ const adminRoutes = () => app.routes
   .map((r) => ({ method: r.method === 'ALL' ? 'GET' : r.method, path: r.path.replace(':provider', 'google').replace(':id', 'google%3Aowner%40example.com') }))
 
 test('there are admin routes to check', () => {
-  assert.ok(adminRoutes().length >= 11, `expected at least 11 admin routes, got ${adminRoutes().length}`)
+  assert.ok(adminRoutes().length >= 13, `expected at least 13 admin routes, got ${adminRoutes().length}`)
 })
 
 test('every admin route refuses a request with no Access token', async () => {
@@ -113,6 +113,36 @@ test('the gate threads the verified owner email into the handler (recorded as ca
     assert.equal(res.status, 200)
     const row = db.raw.prepare('SELECT cancelled_by FROM public_bookings_cancelled WHERE id = ?').get('booking-1')
     assert.equal(row.cancelled_by, OWNER)
+  } finally {
+    gateOptions.getKey = undefined
+  }
+})
+
+test('POST /api/admin/no-show is behind the same gate and records the owner as no_show_by', async () => {
+  const db = realDB()
+  await savePublicBooking(db, {
+    id: 'booking-2', email: 'guest@example.com', name: 'Guest', durationMinutes: 30,
+    startUtc: '2026-10-01T13:00:00.000Z', endUtc: '2026-10-01T13:30:00.000Z',
+  })
+  const body = JSON.stringify({ id: 'booking-2' })
+  // No token: 403 from the gate, and the row is untouched.
+  const denied = await app.request('/api/admin/no-show', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body,
+  }, ENV(db), ctx)
+  assert.equal(denied.status, 403)
+  assert.equal(db.raw.prepare('SELECT no_show_at FROM public_bookings WHERE id = ?').get('booking-2').no_show_at, null)
+
+  gateOptions.getKey = localJWKS
+  try {
+    const token = await ownerToken()
+    const res = await app.request('/api/admin/no-show', {
+      method: 'POST',
+      headers: { 'Cf-Access-Jwt-Assertion': token, 'Content-Type': 'application/json' },
+      body,
+    }, ENV(db), ctx)
+    assert.equal(res.status, 200)
+    const row = db.raw.prepare('SELECT no_show_by FROM public_bookings WHERE id = ?').get('booking-2')
+    assert.equal(row.no_show_by, OWNER)
   } finally {
     gateOptions.getKey = undefined
   }

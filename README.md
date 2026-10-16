@@ -51,7 +51,9 @@ free quota.
 ## What it stores
 
 For each booking: the visitor's name, email, company and notes, and their IP
-address. The IP is kept only to enforce abuse limits on the booking form.
+address. The IP is kept only to enforce abuse limits on the booking form. If
+you mark a past meeting as a no-show on `/admin/bookings.html`, the time of
+that click and your email are stored on the booking too.
 
 A nightly job (07:17 UTC) clears stored IP addresses 30 days after the booking
 was made and deletes booking records 24 months after the meeting date. To change
@@ -61,6 +63,69 @@ those periods, edit `IP_RETENTION_DAYS` and `RECORD_RETENTION_MONTHS` in
 Calendar connection tokens and your settings live in the same D1 database in
 your Cloudflare account. OAuth client secrets and the Turnstile secret are
 Worker secrets, never stored in the database or in this repo.
+
+## Webhook (optional)
+
+meet-kit can tell another system about bookings as they happen. It is off
+unless you set it up; nothing else changes when it is on.
+
+**What it sends.** One HTTPS `POST` per event, with a JSON body:
+
+```json
+{
+  "type": "booking.created",
+  "id": "<booking id>",
+  "occurred_at": "<ISO 8601 UTC>",
+  "booking": {
+    "id": "…", "created_at": "…", "attendee_email": "…", "attendee_name": "…",
+    "company": "…", "duration_min": 30, "start_utc": "…", "end_utc": "…",
+    "topic": "…", "meet_url": "…", "event_id": "…", "calendar_id": "…"
+  }
+}
+```
+
+**The three events.**
+
+| `type` | When | Extra fields in `booking` |
+|---|---|---|
+| `booking.created` | a visitor booked on `/meet` and the record was saved | — |
+| `booking.cancelled` | you cancelled it from `/admin/bookings.html` and the record moved | `cancelled_at`, `cancelled_by` |
+| `booking.no_show` | you clicked **Mark no-show** on a past meeting (once per booking) | `no_show_at`, `no_show_by` |
+
+The visitor's **notes** and **IP address are never sent.**
+
+**Headers.** `X-Meet-Event` is the `type`, `X-Meet-Delivery` is a unique id
+per attempt, and `X-Meet-Signature-256` is the lowercase hex HMAC-SHA256 of
+the raw request body, keyed with your `BOOKING_WEBHOOK_SECRET`. Verify it
+before trusting anything in the body:
+
+```
+raw      = the request body, exactly as received (bytes, not re-serialised JSON)
+expected = hex( HMAC_SHA256( key = BOOKING_WEBHOOK_SECRET, message = raw ) )
+given    = request.header("X-Meet-Signature-256")
+if not constant_time_equal(given, expected): reject with 400
+event    = json_parse(raw)
+handle(event)   # make it idempotent on event.id: a redelivery must be harmless
+```
+
+**Delivery.** Best-effort: one attempt, a 10-second timeout, fired after the
+booking record is written and after the visitor's (or your) response is on its
+way. A slow or failing receiver never delays or fails a booking. There are no
+retries; the result of each attempt is in the Worker logs as
+`[booking-webhook] <type> <id> -> <status|error>`. Treat the admin page as the
+source of truth and the webhook as a notification.
+
+**Turn it on.**
+
+1. Set `vars.BOOKING_WEBHOOK_URL` in `wrangler.jsonc` to your receiver's
+   `https://` URL (plain `http://` is ignored).
+2. Run `npx wrangler secret put BOOKING_WEBHOOK_SECRET` and enter a long
+   random string. Give the same string to the receiver.
+3. If this deployment predates the no-show action, apply
+   `migrations/002_booking_no_show.sql` (see "Updating").
+4. `npx wrangler deploy`.
+
+To turn it off, empty `BOOKING_WEBHOOK_URL` and deploy again.
 
 ## Updating
 
@@ -73,6 +138,7 @@ git pull upstream main
 npm install && npm test
 # then apply any NEW migrations/NNN_*.sql files, oldest first -- BEFORE deploying:
 #   npx wrangler d1 execute meet-kit --remote --file=migrations/NNN_name.sql
+# e.g. the no-show columns: migrations/002_booking_no_show.sql
 npx wrangler deploy
 ```
 
