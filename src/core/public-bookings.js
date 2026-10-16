@@ -34,11 +34,11 @@ export async function getPublicBooking(db, id) {
   return db.prepare(`SELECT * FROM public_bookings WHERE id = ?`).bind(id).first()
 }
 
-/** Live public bookings whose end is still in the future, soonest first. */
+/** Live public bookings that have not started yet, soonest first. */
 export async function listUpcomingPublic(db, nowIso) {
   const { results } = await db
     .prepare(
-      `SELECT * FROM public_bookings WHERE end_utc >= ? ORDER BY start_utc`,
+      `SELECT * FROM public_bookings WHERE start_utc > ? ORDER BY start_utc`,
     )
     .bind(nowIso)
     .all()
@@ -54,7 +54,7 @@ export async function listUpcomingPublic(db, nowIso) {
 export async function listRecentPublic(db, fromIso, nowIso) {
   const { results } = await db
     .prepare(
-      `SELECT * FROM public_bookings WHERE end_utc < ? AND end_utc >= ? ORDER BY start_utc DESC`,
+      `SELECT * FROM public_bookings WHERE start_utc <= ? AND start_utc >= ? ORDER BY start_utc DESC`,
     )
     .bind(nowIso, fromIso)
     .all()

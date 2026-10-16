@@ -185,7 +185,7 @@ test('cancel with the webhook unconfigured sends nothing', async () => {
 // Recent (past 14 days) list for the no-show action.
 // ---------------------------------------------------------------------------
 
-test('the list also returns recent (ended within 14 days) bookings, newest first, with noShowAt', async () => {
+test('the list also returns recent (started within 14 days) bookings, newest first, with noShowAt', async () => {
   const { db } = await seed()   // one upcoming row (2099)
   const day = 86_400_000
   const iso = (ms) => new Date(ms).toISOString()

@@ -52,19 +52,19 @@ test('a cancelled no-show keeps its stamp in the ledger', async () => {
 
 // --- listRecentPublic -------------------------------------------------------
 
-test('listRecentPublic: ended within the window, newest start first; future and older rows excluded', async () => {
+test('listRecentPublic: started within the window (in progress included), newest start first; future and older rows excluded', async () => {
   const db = realDB()
   await savePublicBooking(db, booking({ id: 'old', startUtc: '2026-09-01T15:00:00.000Z', endUtc: '2026-09-01T15:30:00.000Z' }))
   await savePublicBooking(db, booking({ id: 'a', startUtc: '2026-10-05T15:00:00.000Z', endUtc: '2026-10-05T15:30:00.000Z' }))
   await savePublicBooking(db, booking({ id: 'b', startUtc: '2026-10-12T15:00:00.000Z', endUtc: '2026-10-12T15:30:00.000Z' }))
-  // Ends exactly at the window start: included (>=).
+  // Started before the window start (ended inside it): EXCLUDED, the window is on start_utc.
   await savePublicBooking(db, booking({ id: 'edge', startUtc: '2026-10-02T11:30:00.000Z', endUtc: FROM }))
-  // In progress right now: end == now is NOT recent (strictly <).
+  // In progress right now (started, not ended): recent, so it can be marked a no-show.
   await savePublicBooking(db, booking({ id: 'live', startUtc: '2026-10-16T11:30:00.000Z', endUtc: NOW }))
   await savePublicBooking(db, booking({ id: 'future', startUtc: '2026-10-20T15:00:00.000Z', endUtc: '2026-10-20T15:30:00.000Z' }))
 
   const rows = await listRecentPublic(db, FROM, NOW)
-  assert.deepEqual(rows.map((r) => r.id), ['b', 'a', 'edge'])
+  assert.deepEqual(rows.map((r) => r.id), ['live', 'b', 'a'])
   assert.equal(rows[0].no_show_at, null)
 })
 
