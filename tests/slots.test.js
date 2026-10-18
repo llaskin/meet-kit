@@ -138,3 +138,68 @@ test('each slot carries its end time and duration', () => {
   })
   assert.equal(slots[0].end, '2026-09-14T13:30:00.000Z')
 })
+
+// --- bufferMinutes: breathing room between meetings --------------------------
+
+test('bufferMinutes pads every busy block on both sides', () => {
+  // Busy 11:00-11:30 EDT (15:00-15:30Z). A 15-minute buffer makes the
+  // protected window 10:45-11:45 EDT. On a 15-minute grid with 30-minute
+  // meetings: 10:15 (ends 10:45) is the last slot before, 11:45 the first after.
+  const slots = computeSlots({
+    busy: [{ start: iso('2026-09-14T15:00:00Z'), end: iso('2026-09-14T15:30:00Z') }],
+    rules: { ...RULES, horizonDays: 1, intervalMinutes: 15, bufferMinutes: 15 },
+    now: Date.parse('2026-09-11T12:00:00Z'),
+    fromDay: '2026-09-14',
+  })
+  const starts = slots.map((s) => s.start)
+  assert.equal(starts.includes('2026-09-14T14:15:00.000Z'), true)   // 10:15 EDT, ends 10:45
+  assert.equal(starts.includes('2026-09-14T14:30:00.000Z'), false)  // 10:30 EDT, ends 11:00
+  assert.equal(starts.includes('2026-09-14T14:45:00.000Z'), false)
+  assert.equal(starts.includes('2026-09-14T15:00:00.000Z'), false)
+  assert.equal(starts.includes('2026-09-14T15:15:00.000Z'), false)
+  assert.equal(starts.includes('2026-09-14T15:30:00.000Z'), false)  // 11:30 EDT, inside the trailing buffer
+  assert.equal(starts.includes('2026-09-14T15:45:00.000Z'), true)   // 11:45 EDT
+})
+
+test('bufferMinutes 0, or absent, keeps back-to-back slots exactly as before', () => {
+  const busy = [{ start: iso('2026-09-14T13:00:00Z'), end: iso('2026-09-14T13:30:00Z') }]
+  const base = { busy, rules: { ...RULES, horizonDays: 1 }, now: Date.parse('2026-09-11T12:00:00Z'), fromDay: '2026-09-14' }
+  const absent = computeSlots(base)
+  const zero = computeSlots({ ...base, rules: { ...base.rules, bufferMinutes: 0 } })
+  assert.deepEqual(zero, absent)
+  assert.equal(absent.map((s) => s.start).includes('2026-09-14T13:30:00.000Z'), true)
+})
+
+test('the buffer never reaches before the day opens or past its close', () => {
+  // Busy 08:30-09:00 EDT ends exactly at opening. Buffered it covers until
+  // 09:15, so the 09:00 slot goes, but the day still opens at 09:00 for the
+  // 09:15 slot: the buffer pads busy time, not the business-hours window.
+  const slots = computeSlots({
+    busy: [{ start: iso('2026-09-14T12:30:00Z'), end: iso('2026-09-14T13:00:00Z') }],
+    rules: { ...RULES, horizonDays: 1, intervalMinutes: 15, bufferMinutes: 15 },
+    now: Date.parse('2026-09-11T12:00:00Z'),
+    fromDay: '2026-09-14',
+  })
+  assert.equal(slots[0].start, '2026-09-14T13:15:00.000Z')
+  assert.equal(slots[slots.length - 1].end, '2026-09-14T21:00:00.000Z') // 17:00 EDT close unchanged
+})
+
+test('mergeBusy with padding merges blocks the padding makes adjacent', () => {
+  const merged = mergeBusy([
+    { start: iso('2026-09-14T13:00:00Z'), end: iso('2026-09-14T13:30:00Z') },
+    { start: iso('2026-09-14T13:45:00Z'), end: iso('2026-09-14T14:00:00Z') },
+  ], 15 * 60 * 1000)
+  assert.deepEqual(merged, [
+    { start: Date.parse('2026-09-14T12:45:00Z'), end: Date.parse('2026-09-14T14:15:00Z') },
+  ])
+})
+
+test('a negative or non-numeric stored buffer is treated as 0, never as shrinkage', () => {
+  const busy = [{ start: iso('2026-09-14T13:00:00Z'), end: iso('2026-09-14T13:30:00Z') }]
+  const base = { busy, rules: { ...RULES, horizonDays: 1 }, now: Date.parse('2026-09-11T12:00:00Z'), fromDay: '2026-09-14' }
+  const plain = computeSlots(base)
+  assert.deepEqual(computeSlots({ ...base, rules: { ...base.rules, bufferMinutes: -30 } }), plain)
+  assert.deepEqual(computeSlots({ ...base, rules: { ...base.rules, bufferMinutes: 'abc' } }), plain)
+  // 09:00 EDT is busy; with a NEGATIVE pad it would wrongly reappear.
+  assert.equal(plain.map((s) => s.start).includes('2026-09-14T13:00:00.000Z'), false)
+})

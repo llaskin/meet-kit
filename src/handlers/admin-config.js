@@ -60,6 +60,7 @@ const INT_RULES = [
   ['intervalMinutes', 'rules_interval_minutes', 5, 240],
   ['minNoticeMinutes', 'rules_min_notice_minutes', 0, 10080],
   ['horizonDays', 'rules_horizon_days', 1, 365],
+  ['bufferMinutes', 'rules_buffer_minutes', 0, 240],
 ]
 
 /**

@@ -4,10 +4,15 @@ import { utcToZonedParts, zonedWallTimeToUtc } from './tz.js'
  * Normalise busy intervals to sorted, non-overlapping {start,end} epoch-ms pairs.
  * Adjacent intervals (one ends exactly where the next begins) are merged too:
  * they represent one continuous block of unavailability.
+ *
+ * `padMs` widens every interval by that much on BOTH sides before merging.
+ * This is how the between-meetings buffer works: the busy time grows, the
+ * business-hours window does not, so a buffer can never open the day earlier
+ * or close it later.
  */
-export function mergeBusy(intervals) {
+export function mergeBusy(intervals, padMs = 0) {
   const parsed = (intervals || [])
-    .map((i) => ({ start: Date.parse(i.start), end: Date.parse(i.end) }))
+    .map((i) => ({ start: Date.parse(i.start) - padMs, end: Date.parse(i.end) + padMs }))
     .filter((i) => Number.isFinite(i.start) && Number.isFinite(i.end) && i.end > i.start)
     .sort((a, b) => a.start - b.start)
 
@@ -42,13 +47,18 @@ function nextDay({ year, month, day }) {
  * @param busy     Array of {start,end} ISO strings — the UNION of busy time from
  *                 every connected provider. Overlaps are fine; they get merged.
  * @param rules    { timezone, weekdays[ISO 1-7], startTime 'HH:MM', endTime 'HH:MM',
- *                   durationMinutes, intervalMinutes, minNoticeMinutes, horizonDays }
+ *                   durationMinutes, intervalMinutes, minNoticeMinutes, horizonDays,
+ *                   bufferMinutes }  (bufferMinutes: free time kept on each side
+ *                   of every busy block; 0 or absent means back-to-back is fine)
  * @param now      Epoch ms. Slots earlier than now + minNotice are suppressed.
  * @param fromDay  'YYYY-MM-DD' — first calendar day to consider, in rules.timezone.
  * @returns        Array of { start, end } ISO strings, ascending.
  */
 export function computeSlots({ busy, rules, now, fromDay }) {
-  const merged = mergeBusy(busy)
+  // Never negative: a negative pad would SHRINK busy blocks and invite the
+  // double-booking this grid exists to prevent, whatever D1 happens to hold.
+  const bufferMs = Math.max(0, Number(rules.bufferMinutes) || 0) * 60 * 1000
+  const merged = mergeBusy(busy, bufferMs)
   const startWall = parseHhMm(rules.startTime)
   const endWall = parseHhMm(rules.endTime)
   const durationMs = rules.durationMinutes * 60 * 1000

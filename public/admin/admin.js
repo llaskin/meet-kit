@@ -174,6 +174,7 @@ async function load() {
   $('start').value = cfg.rules.startTime
   $('end').value = cfg.rules.endTime
   $('notice').value = cfg.rules.minNoticeMinutes
+  $('buffer').value = cfg.rules.bufferMinutes ?? 0
   $('horizon').value = cfg.rules.horizonDays
 }
 
@@ -211,6 +212,7 @@ $('save').addEventListener('click', async () => {
           // Numbers, not the raw input strings: the handler accepts either,
           // but a number is unambiguous and cannot pick up stray whitespace.
           minNoticeMinutes: $('notice').value === '' ? undefined : Number($('notice').value),
+          bufferMinutes: $('buffer').value === '' ? undefined : Number($('buffer').value),
           horizonDays: $('horizon').value === '' ? undefined : Number($('horizon').value),
         },
       }),
