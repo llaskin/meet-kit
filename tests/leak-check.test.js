@@ -6,7 +6,7 @@ import { join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url))
-const SKIP_DIRS = new Set(['node_modules', '.git', '.wrangler'])
+const SKIP_DIRS = new Set(['node_modules', '.git', '.wrangler', 'graphify-out'])
 const SELF = 'tests/leak-check.test.js'
 
 // Patterns split so this file does not match itself if SELF is ever removed.
