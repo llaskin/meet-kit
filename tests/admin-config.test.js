@@ -125,6 +125,9 @@ const INVALID = [
   ['intervalMinutes', { rules: { intervalMinutes: 'abc' } }],
   ['minNoticeMinutes', { rules: { minNoticeMinutes: -1 } }],
   ['minNoticeMinutes', { rules: { minNoticeMinutes: 10081 } }],
+  ['bufferMinutes', { rules: { bufferMinutes: -1 } }],
+  ['bufferMinutes', { rules: { bufferMinutes: 241 } }],
+  ['bufferMinutes', { rules: { bufferMinutes: 7.5 } }],
   ['horizonDays', { rules: { horizonDays: 0 } }],
   ['horizonDays', { rules: { horizonDays: 366 } }],
   ['internalAttendeeEmail', { internalAttendeeEmail: 'not-an-email' }],
@@ -236,4 +239,14 @@ test('topics: an invalid list is refused and NOTHING is written', async () => {
 
 test('topics: allowOtherTopic must be boolean', async () => {
   assert.equal((await put(realDB(), { allowOtherTopic: 'yes' })).status, 400)
+})
+
+test('bufferMinutes round-trips, as a number or a form string', async () => {
+  const db = realDB()
+  assert.equal((await put(db, { rules: { bufferMinutes: 15 } })).status, 200)
+  assert.equal((await store.getRules(db)).bufferMinutes, 15)
+  assert.equal((await put(db, { rules: { bufferMinutes: '0' } })).status, 200)
+  assert.equal((await store.getRules(db)).bufferMinutes, 0)
+  const got = await (await onRequestGet({ env: ENV(db) })).json()
+  assert.equal(got.rules.bufferMinutes, 0)
 })

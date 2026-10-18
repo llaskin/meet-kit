@@ -93,3 +93,9 @@ test('getWriteConnection queries only role=write, whatever the caller passes', a
   await getWriteConnection(db)
   assert.match(sql, /role = 'write'/)
 })
+
+test('bufferMinutes defaults to 0 and is read from rules_buffer_minutes', async () => {
+  assert.equal(DEFAULT_RULES.bufferMinutes, 0)
+  assert.equal((await getRules(fakeDB({}))).bufferMinutes, 0)
+  assert.equal((await getRules(fakeDB({ rules_buffer_minutes: '15' }))).bufferMinutes, 15)
+})

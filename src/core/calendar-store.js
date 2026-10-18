@@ -10,6 +10,9 @@ export const DEFAULT_RULES = {
   intervalMinutes: 30,
   minNoticeMinutes: 120,
   horizonDays: 21,
+  // Free minutes kept on both sides of every existing meeting. 0 keeps the
+  // historical back-to-back behaviour; existing deployments change nothing.
+  bufferMinutes: 0,
 }
 
 export async function getConfig(db) {
@@ -75,6 +78,7 @@ export async function getRules(db) {
     intervalMinutes: num('rules_interval_minutes', DEFAULT_RULES.intervalMinutes),
     minNoticeMinutes: num('rules_min_notice_minutes', DEFAULT_RULES.minNoticeMinutes),
     horizonDays: num('rules_horizon_days', DEFAULT_RULES.horizonDays),
+    bufferMinutes: num('rules_buffer_minutes', DEFAULT_RULES.bufferMinutes),
   }
 }
 
