@@ -114,7 +114,8 @@ const INVALID = [
   ['endTime', { rules: { startTime: '09:00', endTime: '09:00' } }],
   ['weekdays', { rules: { weekdays: [] } }],
   ['weekdays', { rules: { weekdays: [1, 1] } }],
-  ['weekdays', { rules: { weekdays: [7] } }],
+  ['weekdays', { rules: { weekdays: [0] } }],
+  ['weekdays', { rules: { weekdays: [8] } }],
   ['weekdays', { rules: { weekdays: [1.5] } }],
   ['weekdays', { rules: { weekdays: '1,2' } }],
   ['intervalMinutes', { rules: { intervalMinutes: -5 } }],
@@ -166,6 +167,17 @@ test('PUT persists availability rules', async () => {
   assert.equal(rules.intervalMinutes, 15)
   assert.equal(rules.minNoticeMinutes, 60)
   assert.equal(rules.horizonDays, 14)
+})
+
+test('weekdays are ISO numbered: 7 is Sunday and is accepted, 0 is refused', async () => {
+  // computeSlots compares against tz.js's ISO weekday (Mon=1..Sun=7). Before
+  // this test the admin accepted 0-6, so Sunday could never be offered and a
+  // stored 0 matched nothing; every seed of '0,1,2,3,4,5,6' failed on Sundays.
+  const db = realDB()
+  assert.equal((await put(db, { rules: { weekdays: [6, 7] } })).status, 200)
+  assert.deepEqual((await store.getRules(db)).weekdays, [6, 7])
+  assert.equal((await put(db, { rules: { weekdays: [0, 1] } })).status, 400)
+  assert.deepEqual((await store.getRules(db)).weekdays, [6, 7])
 })
 
 test('integer-shaped strings from form inputs are accepted', async () => {

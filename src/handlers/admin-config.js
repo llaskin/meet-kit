@@ -92,8 +92,10 @@ async function plan(db, env, body) {
     }
     if (r.weekdays != null) {
       const w = r.weekdays
-      if (!Array.isArray(w) || w.length === 0 || !w.every((d) => Number.isInteger(d) && d >= 0 && d <= 6) || new Set(w).size !== w.length) {
-        return bad('rules.weekdays must be a non-empty list of distinct days 0-6')
+      if (!Array.isArray(w) || w.length === 0 || !w.every((d) => Number.isInteger(d) && d >= 1 && d <= 7) || new Set(w).size !== w.length) {
+        // ISO numbering, the same convention tz.js and computeSlots use
+        // (Mon=1 .. Sun=7). Accepting 0-6 here once made Sunday unbookable.
+        return bad('rules.weekdays must be a non-empty list of distinct days 1-7 (1=Mon … 7=Sun)')
       }
       writes.push(['rules_weekdays', w.join(',')])
     }

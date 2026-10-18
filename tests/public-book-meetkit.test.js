@@ -18,7 +18,7 @@ async function seed({ meetFlag = '1', fixed = '' } = {}) {
   await store.setConfig(db, 'write_calendar_meet', meetFlag)
   if (fixed) await store.setConfig(db, 'meet_link', fixed)
   // Monday-Sunday all day, so a near-future slot always exists.
-  await store.setConfig(db, 'rules_weekdays', '0,1,2,3,4,5,6')
+  await store.setConfig(db, 'rules_weekdays', '1,2,3,4,5,6,7')
   await store.setConfig(db, 'rules_start_time', '00:00')
   await store.setConfig(db, 'rules_end_time', '23:30')
   await store.setConfig(db, 'rules_min_notice_minutes', '0')

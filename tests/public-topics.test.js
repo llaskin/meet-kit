@@ -21,7 +21,7 @@ async function seed({ topics, allowOther = false } = {}) {
   await store.setConfig(db, 'write_calendar_id', OWNER)
   await store.setConfig(db, 'write_calendar_meet', '0')
   await store.setConfig(db, 'meet_link', 'https://meet.example.com/fixed')
-  await store.setConfig(db, 'rules_weekdays', '0,1,2,3,4,5,6')
+  await store.setConfig(db, 'rules_weekdays', '1,2,3,4,5,6,7')
   await store.setConfig(db, 'rules_start_time', '00:00')
   await store.setConfig(db, 'rules_end_time', '23:30')
   await store.setConfig(db, 'rules_min_notice_minutes', '0')

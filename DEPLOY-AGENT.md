@@ -313,7 +313,7 @@ plain-http host such as a local `wrangler dev`.
    - "not available on this calendar": enter a **Fixed meeting link**
      (`https://...`). Setting one is also worth doing when Meet is available, as
      a fallback. A booking is never confirmed without a video link.
-5. **Availability rules:** set **Time zone**, **Weekdays** (0=Sun … 6=Sat,
+5. **Availability rules:** set **Time zone**, **Weekdays** (1=Mon … 7=Sun,
    comma separated) and **Day starts / Day ends**. The defaults are
    `America/New_York`, Mon–Fri (`1,2,3,4,5`), `09:00`–`17:00`. Leaving them means
    offering Eastern business hours. Adjust minimum notice and booking horizon if
