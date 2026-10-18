@@ -62,6 +62,10 @@ CREATE TABLE IF NOT EXISTS public_bookings (
   calendar_id     TEXT,
   meet_url_source TEXT CHECK (meet_url_source IN ('unique', 'fixed')),
   topic           TEXT,
+  -- Set by the admin "Mark no-show" action (POST /api/admin/no-show). Rows
+  -- stay live: a no-show is a fact about a meeting, not a cancellation.
+  no_show_at      TEXT,
+  no_show_by      TEXT,
   UNIQUE (start_utc)
 );
 CREATE INDEX IF NOT EXISTS idx_public_bookings_cap ON public_bookings (cap_identity, created_at);
@@ -84,6 +88,8 @@ CREATE TABLE IF NOT EXISTS public_bookings_cancelled (
   calendar_id     TEXT,
   meet_url_source TEXT,
   topic           TEXT,
+  no_show_at      TEXT,
+  no_show_by      TEXT,
   cancelled_at    TEXT NOT NULL,
   cancelled_by    TEXT
 );

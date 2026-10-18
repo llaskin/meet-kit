@@ -10,6 +10,7 @@ import { utcToZonedParts } from '../core/tz.js'
 import { loadCfg } from './context.js'
 import { createBookingEvent } from '../core/video-link.js'
 import * as google from '../core/google-calendar.js'
+import { sendBookingWebhook } from '../core/booking-webhook.js'
 
 const json = (status, body) => Response.json(body, { status })
 
@@ -73,8 +74,12 @@ const CAP_HOURS = 24
  *   7. create     -- the calendar event.
  *   8. record     -- ONE row in public_bookings, and nothing else -- this
  *                    path must never write to any other table in schema.sql.
+ *   9. notify     -- the optional outbound webhook (booking-webhook.js),
+ *                    through waitUntil, only once the row is saved. It never
+ *                    delays or fails the response, and no refusal above
+ *                    reaches it.
  */
-export async function onRequestPost({ request, env, site }) {
+export async function onRequestPost({ request, env, site, waitUntil }) {
   let b
   try {
     b = await request.json()
@@ -224,8 +229,15 @@ export async function onRequestPost({ request, env, site }) {
   // between our membership check and this insert. The event we just created is
   // a duplicate; report it as taken rather than confirming a booking we did not
   // record.
+  //
+  // id and created_at are minted HERE (savePublicBooking accepts them) so the
+  // webhook below can describe the saved row without a second read.
+  const id = crypto.randomUUID()
+  const createdAt = new Date().toISOString()
   try {
     await savePublicBooking(db, {
+      id,
+      createdAt,
       email,
       capIdentity: capIdentity(email),
       name: attendeeName,
@@ -247,6 +259,30 @@ export async function onRequestPost({ request, env, site }) {
     await google.deleteEvent(token, { calendarId: writeCalendarId, eventId: created.eventId }).catch(() => {})
     return json(409, { error: GENERIC })
   }
+
+  // The row is saved: tell the (optional) webhook receiver. Fire-and-forget
+  // through waitUntil so the visitor's confirmation is never held up by, or
+  // broken by, a third-party endpoint. sendBookingWebhook never throws, and
+  // only whitelisted fields leave here -- notes and the IP never do. The row
+  // shape mirrors what savePublicBooking just wrote (lower-cased email).
+  const notify = sendBookingWebhook(env, {
+    type: 'booking.created',
+    booking: {
+      id,
+      created_at: createdAt,
+      attendee_email: email.toLowerCase(),
+      attendee_name: attendeeName,
+      company,
+      duration_min: duration,
+      start_utc: b.start,
+      end_utc: b.end,
+      topic: resolved.topic || null,
+      meet_url: created.meetUrl || null,
+      event_id: created.eventId || null,
+      calendar_id: writeCalendarId,
+    },
+  })
+  if (typeof waitUntil === 'function') waitUntil(notify)
 
   // Deliberately minimal. No eventId, no connection details, nothing about
   // this endpoint's internals -- just enough for the confirmation screen.

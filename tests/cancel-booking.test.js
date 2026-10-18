@@ -167,3 +167,17 @@ test('a booking predating the calendar_id column falls back to config', async ()
   const del = calls.find((c) => c.opts?.method === 'DELETE')
   assert.match(decodeURIComponent(del.url), /calendars\/legacy@group\.calendar\.google\.com\//)
 })
+
+test('a successful cancel returns the row it moved, so the caller can describe it', async () => {
+  const db = countingDB(); await seedAccount(db)
+  await seedPublic(db, { topic: 'Audit review' })
+  googleStub(204)
+
+  const r = await cancelBooking(db, CFG, { id: 'pb1', cancelledBy: 'u', nowIso: NOW })
+
+  assert.equal(r.ok, true)
+  assert.equal(r.row.id, 'pb1')
+  assert.equal(r.row.attendee_email, 'd@x.co')
+  assert.equal(r.row.topic, 'Audit review')
+  assert.equal(r.row.start_utc, FUTURE)
+})

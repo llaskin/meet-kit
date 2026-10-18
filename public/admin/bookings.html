@@ -26,6 +26,10 @@
   #bk-page .bk-keep{font:inherit;padding:5px 10px;border:1px solid #ccc;border-radius:4px;
     background:#fff;color:#1a1a1a;cursor:pointer;margin-left:6px}
   #bk-page .bk-error{color:#c33;margin:12px 0}
+  #bk-page .bk-h2{font-size:16px;margin:28px 0 4px}
+  #bk-page .bk-noshow{margin-top:8px;font:inherit;padding:5px 10px;border:1px solid #666;
+    border-radius:4px;background:#fff;color:#1a1a1a;cursor:pointer}
+  #bk-page .bk-noshow-stamp{margin-top:8px;color:#5f6368}
 </style>
 </head>
 <body>
@@ -36,6 +40,12 @@
   <p class="bk-error" id="bk-error" hidden></p>
   <p id="bk-empty" hidden>No upcoming meetings.</p>
   <div id="bk-list"></div>
+
+  <h2 class="bk-h2">Recent (past 14 days)</h2>
+  <p class="bk-sub">Meetings that have already started (in progress or ended). Marking a no-show only records it here
+    (and notifies your webhook, if one is set up); nobody is emailed.</p>
+  <p id="bk-recent-empty" hidden>No meetings in the past 14 days.</p>
+  <div id="bk-recent"></div>
 </main>
 <script type="module" src="/admin/bookings.js"></script>
 </body>

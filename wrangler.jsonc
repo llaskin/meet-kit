@@ -23,13 +23,19 @@
   ],
   "vars": {
     // All non-secret. Secrets (GOOGLE_CLIENT_SECRET, ZOHO_CLIENT_SECRET,
-    // TURNSTILE_SECRET_KEY) are set with `wrangler secret put`, never here.
+    // TURNSTILE_SECRET_KEY, BOOKING_WEBHOOK_SECRET) are set with
+    // `wrangler secret put`, never here.
     "OWNER_EMAIL": "",
     "GOOGLE_CLIENT_ID": "",
     "ZOHO_CLIENT_ID": "",
     "TURNSTILE_SITE_KEY": "",
     "ACCESS_TEAM_DOMAIN": "",
-    "ACCESS_AUD": ""
+    "ACCESS_AUD": "",
+    // Optional outbound webhook (README "Webhook (optional)"): an https://
+    // URL that receives signed booking.created / booking.cancelled /
+    // booking.no_show events. Off while empty. Its signing key is the secret
+    // BOOKING_WEBHOOK_SECRET, set with `wrangler secret put`, never here.
+    "BOOKING_WEBHOOK_URL": ""
   },
   "triggers": { "crons": ["17 7 * * *"] }
 }

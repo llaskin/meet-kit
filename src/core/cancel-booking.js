@@ -44,5 +44,8 @@ export async function cancelBooking(db, cfg, { id, cancelledBy, nowIso }) {
         : 'Could not cancel the booking',
     }
   }
-  return { ok: true, alreadyGone }
+  // `row` is the record as it was BEFORE the move: the handler describes the
+  // cancelled booking to the outbound webhook from it, with no second read of
+  // a ledger that a concurrent cancel may already have touched.
+  return { ok: true, alreadyGone, row }
 }
