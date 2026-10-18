@@ -55,7 +55,9 @@ function nextDay({ year, month, day }) {
  * @returns        Array of { start, end } ISO strings, ascending.
  */
 export function computeSlots({ busy, rules, now, fromDay }) {
-  const bufferMs = (rules.bufferMinutes || 0) * 60 * 1000
+  // Never negative: a negative pad would SHRINK busy blocks and invite the
+  // double-booking this grid exists to prevent, whatever D1 happens to hold.
+  const bufferMs = Math.max(0, Number(rules.bufferMinutes) || 0) * 60 * 1000
   const merged = mergeBusy(busy, bufferMs)
   const startWall = parseHhMm(rules.startTime)
   const endWall = parseHhMm(rules.endTime)

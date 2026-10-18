@@ -193,3 +193,13 @@ test('mergeBusy with padding merges blocks the padding makes adjacent', () => {
     { start: Date.parse('2026-09-14T12:45:00Z'), end: Date.parse('2026-09-14T14:15:00Z') },
   ])
 })
+
+test('a negative or non-numeric stored buffer is treated as 0, never as shrinkage', () => {
+  const busy = [{ start: iso('2026-09-14T13:00:00Z'), end: iso('2026-09-14T13:30:00Z') }]
+  const base = { busy, rules: { ...RULES, horizonDays: 1 }, now: Date.parse('2026-09-11T12:00:00Z'), fromDay: '2026-09-14' }
+  const plain = computeSlots(base)
+  assert.deepEqual(computeSlots({ ...base, rules: { ...base.rules, bufferMinutes: -30 } }), plain)
+  assert.deepEqual(computeSlots({ ...base, rules: { ...base.rules, bufferMinutes: 'abc' } }), plain)
+  // 09:00 EDT is busy; with a NEGATIVE pad it would wrongly reappear.
+  assert.equal(plain.map((s) => s.start).includes('2026-09-14T13:00:00.000Z'), false)
+})
