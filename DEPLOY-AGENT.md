@@ -320,7 +320,7 @@ plain-http host such as a local `wrangler dev`.
    wanted. **Buffer between meetings** keeps that many free minutes on each
    side of every existing event on the connected calendars (0 allows
    back-to-back). On a 30-minute grid a 15-minute buffer costs a whole slot;
-   set the slot interval to 15 as well if you want meetings exactly 15 apart.
+   set **Slot interval** to 15 as well if you want meetings exactly 15 apart.
 6. Optional: **Meeting topics.** One topic per line (up to 12, each up to 40
    characters), and tick **Offer "Other" with a short custom topic** if you
    want visitors to describe their own. Leave the list empty and unticked to

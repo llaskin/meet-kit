@@ -13,7 +13,7 @@ const CONFIG = {
   googleConfigured: true, turnstileConfigured: true, zohoConfigured: false,
   zohoAccountEmail: '', writeAccount: null, writeCalendarId: '', bookingCalendars: [],
   uniqueMeet: false, meetLink: '', internalAttendeeEmail: '',
-  rules: { timezone: 'America/New_York', weekdays: [1, 2, 3, 4, 5], startTime: '09:00', endTime: '17:00', minNoticeMinutes: 60, bufferMinutes: 10, horizonDays: 14 },
+  rules: { timezone: 'America/New_York', weekdays: [1, 2, 3, 4, 5], startTime: '09:00', endTime: '17:00', intervalMinutes: 30, minNoticeMinutes: 60, bufferMinutes: 10, horizonDays: 14 },
 }
 
 // An attacker-shaped calendar name (round-tripped from Google through our own
@@ -488,4 +488,18 @@ test('the buffer field loads from config and is sent back as a number on save', 
   await settle()
   assert.equal(puts.length, 1)
   assert.equal(puts[0].rules.bufferMinutes, 15)
+})
+
+test('the slot-interval field loads from config and is sent back as a number on save', async () => {
+  // The API validated intervalMinutes all along, and DEPLOY-AGENT step 5 tells
+  // the operator to set it to 15 next to the buffer, but the page had no field
+  // for it: the only way to change the interval was to edit D1 by hand.
+  const { window, puts } = await bootForSave()
+  const doc = window.document
+  assert.equal(doc.getElementById('interval').value, '30')
+  doc.getElementById('interval').value = '15'
+  doc.getElementById('save').dispatchEvent(new window.Event('click', { bubbles: true }))
+  await settle()
+  assert.equal(puts.length, 1)
+  assert.equal(puts[0].rules.intervalMinutes, 15)
 })
