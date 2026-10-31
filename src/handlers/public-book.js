@@ -6,7 +6,7 @@ import { savePublicBooking, countRecentByEmail, countRecentByIp, countRecentTota
 import { validateCustomTopic, resolveTopic, eventTitle, topicsFromConfig, OTHER_CHOICE } from '../../public/topics.js'
 import { gatherBusy } from '../core/busy.js'
 import { computeSlots } from '../core/slots.js'
-import { utcToZonedParts } from '../core/tz.js'
+import { utcToZonedParts, validTimeZone } from '../core/tz.js'
 import { loadCfg } from './context.js'
 import { createBookingEvent } from '../core/video-link.js'
 import * as google from '../core/google-calendar.js'
@@ -195,6 +195,8 @@ export async function onRequestPost({ request, env, site, waitUntil }) {
   const clamp = (v, n) => (typeof v === 'string' ? v.trim().slice(0, n) : '')
   const attendeeName = clamp(b.attendee_name, 80)
   const company = clamp(b.company, 80)
+  // Passed to the webhook only. Invalid → null, never a refusal.
+  const attendeeTimeZone = validTimeZone(b.attendee_timezone)
   const notes = clamp(b.notes, 500)
 
   const writeCalendarId = cfg.write_calendar_id || 'primary'
@@ -281,6 +283,7 @@ export async function onRequestPost({ request, env, site, waitUntil }) {
       event_id: created.eventId || null,
       calendar_id: writeCalendarId,
     },
+    extra: { attendee_timezone: attendeeTimeZone },
   })
   if (typeof waitUntil === 'function') waitUntil(notify)
 

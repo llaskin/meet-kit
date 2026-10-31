@@ -3,7 +3,7 @@ import test from 'node:test'
 import { JSDOM } from 'jsdom'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { readForm, buildCard, formatWhen, showConfirmation, initMeet, applySite, renderTopics, readTopic } from '../public/meet.js'
+import { readForm, buildCard, formatWhen, showConfirmation, initMeet, applySite, renderTopics, readTopic, browserTimeZone } from '../public/meet.js'
 
 // Drive the REAL page, not a fixture, so this cannot drift from what ships.
 const PAGE = readFileSync(fileURLToPath(new URL('../public/meet.html', import.meta.url)), 'utf8')
@@ -112,6 +112,22 @@ test('the synthetic card is never attached to the document', () => {
   const before = d.querySelectorAll('.card').length
   buildCard(d, { company: 'X', notes: '' })
   assert.equal(d.querySelectorAll('.card').length, before)
+})
+
+test("extraBody carries the browser's IANA time zone", () => {
+  const d = doc()
+  let got = null
+  d.defaultView.MEETKIT_PICKER = { openModal: (card, opts) => { got = opts } }
+  initMeet(d)
+  fill(d)
+  d.getElementById('meet-form').dispatchEvent(new d.defaultView.Event('submit', { bubbles: true, cancelable: true }))
+  assert.equal(got.extraBody().attendee_timezone, Intl.DateTimeFormat().resolvedOptions().timeZone)
+})
+
+test('browserTimeZone never throws and returns a string', () => {
+  assert.equal(typeof browserTimeZone(), 'string')
+  const broken = { DateTimeFormat: () => { throw new Error('no Intl') } }
+  assert.equal(browserTimeZone(broken), '')
 })
 
 test('extraBody carries the Turnstile token and the honeypot, read at submit time', () => {

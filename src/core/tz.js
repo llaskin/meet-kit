@@ -58,3 +58,19 @@ export function zonedWallTimeToUtc({ year, month, day, hour, minute = 0, second 
   const firstPass = guess - zoneOffsetMs(guess, timeZone)
   return guess - zoneOffsetMs(firstPass, timeZone)
 }
+
+/**
+ * A visitor-supplied IANA zone name (the /meet page sends the browser's), or
+ * null. Untrusted input from an unauthenticated endpoint: a string of at most
+ * 64 zone-name characters that Intl actually accepts. Never throws.
+ */
+export function validTimeZone(v) {
+  if (typeof v !== 'string' || v.length === 0 || v.length > 64) return null
+  if (!/^[A-Za-z0-9_+\-/]+$/.test(v)) return null
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: v })
+    return v
+  } catch {
+    return null
+  }
+}

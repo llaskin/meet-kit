@@ -34,7 +34,10 @@ const BOOKING_FIELDS = [
 ]
 
 // Per-event stamps the handlers add. Also a whitelist, for the same reason.
-const EXTRA_FIELDS = ['cancelled_at', 'cancelled_by', 'no_show_at', 'no_show_by']
+// attendee_timezone rides booking.created only: the browser's IANA zone, so a
+// receiver can show the call in the attendee's own time. It has no D1 column,
+// so it is an extra, not a row field (cancel/no-show payloads stay unchanged).
+const EXTRA_FIELDS = ['cancelled_at', 'cancelled_by', 'no_show_at', 'no_show_by', 'attendee_timezone']
 
 export function isWebhookConfigured(env) {
   const url = env?.BOOKING_WEBHOOK_URL

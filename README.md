@@ -88,7 +88,7 @@ unless you set it up; nothing else changes when it is on.
 
 | `type` | When | Extra fields in `booking` |
 |---|---|---|
-| `booking.created` | a visitor booked on `/meet` and the record was saved | — |
+| `booking.created` | a visitor booked on `/meet` and the record was saved | `attendee_timezone` (the visitor's browser time zone, e.g. `America/Chicago`, or `null`) |
 | `booking.cancelled` | you cancelled it from `/admin/bookings.html` and the record moved | `cancelled_at`, `cancelled_by` |
 | `booking.no_show` | you clicked **Mark no-show** on a past meeting (once per booking) | `no_show_at`, `no_show_by` |
 

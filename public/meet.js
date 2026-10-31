@@ -93,6 +93,19 @@ export async function loadTopics(doc) {
   }
 }
 
+/**
+ * The browser's IANA time zone ('' if unavailable), sent with the booking so a
+ * webhook receiver can show the call in the visitor's own time. The server
+ * validates it; it never affects the booking itself.
+ */
+export function browserTimeZone(intl = globalThis.Intl) {
+  try {
+    return intl.DateTimeFormat().resolvedOptions().timeZone || ''
+  } catch {
+    return ''
+  }
+}
+
 export function initMeet(doc) {
   const form = doc.getElementById('meet-form')
   if (!form) return false
@@ -128,6 +141,7 @@ export function initMeet(doc) {
         website: res.values.website,
         topic_choice: topic.topic_choice,
         topic_custom: topic.topic_custom,
+        attendee_timezone: browserTimeZone(win.Intl),
         turnstileToken: win.turnstile?.getResponse?.(win.__meetTurnstileId) || '',
       }),
       onBooked: (booking) => showConfirmation(doc, booking),

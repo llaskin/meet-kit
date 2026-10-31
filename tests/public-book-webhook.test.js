@@ -94,11 +94,35 @@ test('a successful booking emits booking.created exactly once, after the save, w
       id: row.id, created_at: row.created_at, attendee_email: 'v@example.org', attendee_name: 'V',
       company: 'Co', duration_min: 30, start_utc: s.start, end_utc: s.end, topic: null,
       meet_url: 'https://meet.google.com/u', event_id: 'e1', calendar_id: OWNER,
+      attendee_timezone: null,
     })
     assert.ok(!opts.body.includes('private stuff'), 'notes must never be sent')
     assert.ok(!opts.body.includes('203.0.113.9'), 'client_ip must never be sent')
   } finally { restore() }
 })
+
+// attendee_timezone: the browser's IANA zone, validated, carried in the
+// booking.created payload only (no D1 column). A receiver can use it to show
+// the call in the attendee's own time.
+for (const [label, sent, expected] of [
+  ['a valid zone is passed through', 'America/Chicago', 'America/Chicago'],
+  ['a zone Intl rejects becomes null', 'Mars/Olympus_Mons', null],
+  ['an overlong value becomes null', 'America/' + 'X'.repeat(80), null],
+  ['a non-string becomes null', 42, null],
+  ['markup becomes null', '<script>', null],
+  ['a missing zone is null', undefined, null],
+]) {
+  test(`attendee_timezone: ${label}`, async () => {
+    const db = await seed()
+    const hooks = stubs()
+    const restore = quiet()
+    try {
+      const { res } = await post(db, { ...GOOD(nextSlot()), attendee_timezone: sent })
+      assert.equal(res.status, 200, 'a bad zone never refuses a booking')
+      assert.equal(JSON.parse(hooks[0].opts.body).booking.attendee_timezone, expected)
+    } finally { restore() }
+  })
+}
 
 test('the booking response does not wait on, and is not changed by, the webhook', async () => {
   const db = await seed()
